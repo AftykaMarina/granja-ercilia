@@ -404,6 +404,7 @@ p{margin:0;}
   <div class="toast" id="toast"></div>
   <div class="modal" id="modalPerfil"></div>
   <div class="modal" id="modalEditar"></div>
+  <div class="modal" id="modalPedidoEdit"></div>
 </div>
 
 <script>
@@ -1370,8 +1371,10 @@ function _renderPedidosInner(el) {
   const entregados = state.pedidos.filter(pd => pd.estado === 'ENTREGADO');
   const cancelados = state.pedidos.filter(pd => pd.estado === 'CANCELADO');
 
+  const totalReservadoMaples = reservados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
   const totalReservadoEgg = reservados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
   const totalReservadoMiel = reservados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+  const totalEntregadoMaples = entregados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
   const totalEntregadoEgg = entregados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
   const totalEntregadoMiel = entregados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
 
@@ -1383,9 +1386,10 @@ function _renderPedidosInner(el) {
           '<label class="field"><span>Cliente</span><input type="text" id="pd_cliente" placeholder="Nombre del cliente" required></label>' +
           '<label class="field"><span>Producto</span><select id="pd_producto"><option value="HUEVOS">Huevos</option><option value="MIEL">Miel</option></select></label>' +
         '</div>' +
-        '<div class="formRow2">' +
-          '<label class="field"><span>Presentación</span><select id="pd_presentacion"></select></label>' +
-          '<label class="field"><span>Cantidad</span><input type="number" min="1" id="pd_cantidad" placeholder="Ej: 2" required value="1"></label>' +
+        '<div class="formRow2" id="pd_presentacionRow">' +
+          '<label class="field" id="pd_presWrap"><span>Presentación</span><select id="pd_presentacion"></select></label>' +
+          '<label class="field"><span id="pd_cantidadLabel">Maples</span><input type="number" min="1" id="pd_cantidad" placeholder="Ej: 2" required value="1"></label>' +
+        '</div>' +
         '</div>' +
         '<div class="formRow2">' +
           '<label class="field"><span>Fecha necesaria</span><input type="date" id="pd_fechaNecesaria" value="' + addDays(hoy, 1) + '" required></label>' +
@@ -1402,10 +1406,10 @@ function _renderPedidosInner(el) {
     '<section class="panel">' +
       '<div class="panel__head"><h3>Resumen</h3></div>' +
       '<div class="statGrid">' +
-        statCard('Reservas huevos', num(totalReservadoEgg), 'unidades pendientes', totalReservadoEgg ? 'ok' : 'ok') +
-        statCard('Reservas miel', num(totalReservadoMiel), 'unidades pendientes', totalReservadoMiel ? 'ok' : 'ok') +
-        statCard('Entregados huevos', num(totalEntregadoEgg), 'unidades', 'ok') +
-        statCard('Entregados miel', num(totalEntregadoMiel), 'unidades', 'ok') +
+        statCard('Reservas huevos', num(totalReservadoMaples) + ' maples', num(totalReservadoEgg) + ' unidades', totalReservadoEgg ? 'warn' : 'ok') +
+        statCard('Reservas miel', num(totalReservadoMiel), 'frascos pendientes', totalReservadoMiel ? 'warn' : 'ok') +
+        statCard('Entregados huevos', num(totalEntregadoMaples) + ' maples', num(totalEntregadoEgg) + ' unidades', 'ok') +
+        statCard('Entregados miel', num(totalEntregadoMiel), 'frascos', 'ok') +
       '</div>' +
     '</section>' +
 
@@ -1453,6 +1457,10 @@ function _renderPedidosInner(el) {
 
     const totalEggRes = reservadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
     const totalEggEnt = entregadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
+    const totalEggResMaples = Math.floor(totalEggRes / 30);
+    const totalEggResSobrante = totalEggRes % 30;
+    const totalEggEntMaples = Math.floor(totalEggEnt / 30);
+    const totalEggEntSobrante = totalEggEnt % 30;
     const totalMielRes = reservadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
     const totalMielEnt = entregadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
 
@@ -1465,14 +1473,14 @@ function _renderPedidosInner(el) {
     const porDia = {};
     lista.forEach(pd => {
       const dia = pd.fechaNecesaria || pd.fechaReserva;
-      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0 };
+      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, huevosResMap: 0, huevosEntMap: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0 };
       if (pd.estado === 'RESERVADO') {
-        if (pd.producto === 'HUEVOS') porDia[dia].huevosRes += pd.cantidadUnidadesBase;
+        if (pd.producto === 'HUEVOS') { porDia[dia].huevosRes += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosResMap += pd.cantidadPresentacion; }
         else porDia[dia].mielRes += pd.cantidadPresentacion;
         porDia[dia].$reservado += (pd.precioTotal || 0);
       }
       if (pd.estado === 'ENTREGADO') {
-        if (pd.producto === 'HUEVOS') porDia[dia].huevosEnt += pd.cantidadUnidadesBase;
+        if (pd.producto === 'HUEVOS') { porDia[dia].huevosEnt += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosEntMap += pd.cantidadPresentacion; }
         else porDia[dia].mielEnt += pd.cantidadPresentacion;
         porDia[dia].$entregado += (pd.precioTotal || 0);
       }
@@ -1483,8 +1491,8 @@ function _renderPedidosInner(el) {
     if (!cont) return;
     cont.innerHTML =
       '<div class="statGrid">' +
-        statCard('Huevos reservados', num(totalEggRes), 'unidades', totalEggRes ? 'warn' : 'ok') +
-        statCard('Huevos entregados', num(totalEggEnt), 'unidades', 'ok') +
+        statCard('Huevos reservados', totalEggResMaples + ' maples' + (totalEggResSobrante ? ' + ' + totalEggResSobrante + 'u' : ''), totalEggRes + ' unidades', totalEggRes ? 'warn' : 'ok') +
+        statCard('Huevos entregados', totalEggEntMaples + ' maples' + (totalEggEntSobrante ? ' + ' + totalEggEntSobrante + 'u' : ''), totalEggEnt + ' unidades', 'ok') +
         statCard('Miel reservada', num(totalMielRes), 'frascos', totalMielRes ? 'warn' : 'ok') +
         statCard('Miel entregada', num(totalMielEnt), 'frascos', 'ok') +
       '</div>' +
@@ -1497,7 +1505,7 @@ function _renderPedidosInner(el) {
       (dias.length ?
         '<div style="overflow-x:auto;margin-top:12px">' +
         '<table class="tbl"><thead><tr>' +
-          '<th>Fecha necesaria</th><th>Huevos res.</th><th>Huevos ent.</th><th>Miel res.</th><th>Miel ent.</th><th>$ Reservado</th><th>$ Entregado</th>' +
+          '<th>Fecha necesaria</th><th>Huevos res. (u)</th><th>Maples res.</th><th>Huevos ent. (u)</th><th>Maples ent.</th><th>Miel res.</th><th>Miel ent.</th><th>$ Reservado</th><th>$ Entregado</th>' +
         '</tr></thead><tbody>' +
         dias.map(d => {
           const r = porDia[d];
@@ -1506,7 +1514,9 @@ function _renderPedidosInner(el) {
           return '<tr ' + rowStyle + '>' +
             '<td>' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
             '<td>' + (r.huevosRes || '-') + '</td>' +
+            '<td>' + (r.huevosResMap || '-') + '</td>' +
             '<td>' + (r.huevosEnt || '-') + '</td>' +
+            '<td>' + (r.huevosEntMap || '-') + '</td>' +
             '<td>' + (r.mielRes || '-') + '</td>' +
             '<td>' + (r.mielEnt || '-') + '</td>' +
             '<td>$ ' + num(r.$reservado) + '</td>' +
@@ -1534,7 +1544,25 @@ function _renderPedidosInner(el) {
     const prod = selProducto.value;
     const lista = PRESENTACIONES[prod] || [];
     selPres.innerHTML = lista.map(p => '<option value="' + p.id + '">' + p.label + '</option>').join('');
+    /* Huevos: siempre MAPLE, ocultar presentación */
+    if (prod === 'HUEVOS') {
+      selPres.value = 'MAPLE';
+      var presWrap = document.getElementById('pd_presWrap');
+      if (presWrap) presWrap.style.display = 'none';
+    } else {
+      var presWrap2 = document.getElementById('pd_presWrap');
+      if (presWrap2) presWrap2.style.display = '';
+    }
+    actualizarLabelCantidad();
     calcSubtotal();
+  }
+  function actualizarLabelCantidad() {
+    const prod = selProducto.value;
+    const lbl = document.getElementById('pd_cantidadLabel');
+    if (lbl) {
+      if (prod === 'HUEVOS') lbl.textContent = 'Maples';
+      else lbl.textContent = 'Frascos';
+    }
   }
   function calcSubtotal() {
     const prod = selProducto.value;
@@ -1545,7 +1573,7 @@ function _renderPedidosInner(el) {
     inpSubtotal.value = '$ ' + num(total);
   }
   selProducto.addEventListener('change', llenarPresentaciones);
-  selPres.addEventListener('change', calcSubtotal);
+  selPres.addEventListener('change', function() { actualizarLabelCantidad(); calcSubtotal(); });
   inpCant.addEventListener('input', calcSubtotal);
   inpPrecio.addEventListener('input', calcSubtotal);
   llenarPresentaciones();
@@ -1604,6 +1632,147 @@ function _renderPedidosInner(el) {
     await eliminarPedidoPorId(id);
     toast('Pedido eliminado');
   }));
+  el.querySelectorAll('[data-editarpd]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.getAttribute('data-editarpd');
+    abrirEditarPedido(id);
+  }));
+}
+
+/* ---------- Editar Pedido (modal) ---------- */
+function abrirEditarPedido(id) {
+  renderEditarPedido(id);
+  document.getElementById('modalPedidoEdit').classList.add('modal--open');
+}
+function cerrarEditarPedido() {
+  document.getElementById('modalPedidoEdit').classList.remove('modal--open');
+}
+
+function renderEditarPedido(pedidoId) {
+  const modal = document.getElementById('modalPedidoEdit');
+  const pd = state.pedidos.find(p => p.id === pedidoId);
+  if (!pd) { modal.innerHTML = '<div class="modalCard"><p>Pedido no encontrado</p></div>'; return; }
+  const hoy = todayStr();
+  const presListHuevos = PRESENTACIONES.HUEVOS.map(p => '<option value="' + p.id + '"' + (pd.presentacion === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
+  const presListMiel = PRESENTACIONES.MIEL.map(p => '<option value="' + p.id + '"' + (pd.presentacion === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
+  const estados = ['RESERVADO', 'ENTREGADO', 'CANCELADO'].map(e => '<option value="' + e + '"' + (pd.estado === e ? ' selected' : '') + '>' + ESTADO_LABEL[e] + '</option>').join('');
+
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>✏️ Editar pedido</h3><button class="btn btn--sm btn--ghost" id="cerrarEditPd">✕</button></div>' +
+      '<form id="formEditPd" class="form">' +
+        '<label class="field"><span>Cliente</span><input type="text" id="ep_cliente" value="' + escapeHtml(pd.clienteNombre) + '" required></label>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Producto</span><select id="ep_producto"><option value="HUEVOS"' + (pd.producto === 'HUEVOS' ? ' selected' : '') + '>Huevos</option><option value="MIEL"' + (pd.producto === 'MIEL' ? ' selected' : '') + '>Miel</option></select></label>' +
+          '<label class="field" id="ep_presWrap"><span>Presentación</span><select id="ep_presentacion">' + (pd.producto === 'HUEVOS' ? presListHuevos : presListMiel) + '</select></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span id="ep_cantLabel">' + (pd.producto === 'HUEVOS' ? 'Maples' : 'Frascos') + '</span><input type="number" min="1" id="ep_cantidad" value="' + pd.cantidadPresentacion + '" required></label>' +
+          '<label class="field"><span>Estado</span><select id="ep_estado">' + estados + '</select></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Precio unitario ($)</span><input type="number" min="0" step="0.01" id="ep_precio" value="' + (pd.precioTotal && pd.cantidadPresentacion ? Math.round(pd.precioTotal / pd.cantidadPresentacion) : '') + '"></label>' +
+          '<label class="field"><span>Subtotal</span><input type="text" id="ep_subtotal" readonly value="$ ' + num(pd.precioTotal || 0) + '" style="font-weight:700;color:var(--yolk);background:transparent;border:none;"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha necesaria</span><input type="date" id="ep_fechaNecesaria" value="' + (pd.fechaNecesaria || addDays(hoy, 1)) + '"></label>' +
+          '<label class="field"><span>Pagado</span><select id="ep_pagado"><option value="true"' + (pd.pagado ? ' selected' : '') + '>Sí</option><option value="false"' + (!pd.pagado ? ' selected' : '') + '>No</option></select></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha entrega</span><input type="date" id="ep_fechaEntrega" value="' + (pd.fechaEntrega || '') + '"></label>' +
+          '<label class="field"><span>Fecha pago</span><input type="date" id="ep_fechaPago" value="' + (pd.fechaPago || '') + '"></label>' +
+        '</div>' +
+        '<div class="modalRow" style="margin-top:8px">' +
+          '<button type="submit" class="btn btn--primary">💾 Guardar cambios</button>' +
+          '<button type="button" class="btn btn--ghost" id="btnCancelEditPd">Cancelar</button>' +
+        '</div>' +
+      '</form>' +
+    '</div>';
+
+  /* --- Lógica del modal de edición --- */
+  document.getElementById('cerrarEditPd').addEventListener('click', cerrarEditarPedido);
+  document.getElementById('btnCancelEditPd').addEventListener('click', cerrarEditarPedido);
+
+  const epProd = document.getElementById('ep_producto');
+  const epPres = document.getElementById('ep_presentacion');
+  const epCant = document.getElementById('ep_cantidad');
+  const epPrecio = document.getElementById('ep_precio');
+  const epSubtot = document.getElementById('ep_subtotal');
+  const epCantLabel = document.getElementById('ep_cantLabel');
+
+  function epLlenarPres() {
+    const prod = epProd.value;
+    const lista = PRESENTACIONES[prod] || [];
+    epPres.innerHTML = lista.map(p => '<option value="' + p.id + '">' + p.label + '</option>').join('');
+    /* Huevos: siempre MAPLE, ocultar presentación */
+    if (prod === 'HUEVOS') {
+      epPres.value = 'MAPLE';
+      var epPresWrap = document.getElementById('ep_presWrap');
+      if (epPresWrap) epPresWrap.style.display = 'none';
+    } else {
+      var epPresWrap2 = document.getElementById('ep_presWrap');
+      if (epPresWrap2) epPresWrap2.style.display = '';
+    }
+    epActualizarLabel();
+    epCalcSub();
+  }
+  function epActualizarLabel() {
+    const prod = epProd.value;
+    if (prod === 'HUEVOS') epCantLabel.textContent = 'Maples';
+    else epCantLabel.textContent = 'Frascos';
+  }
+  function epCalcSub() {
+    const c = Number(epCant.value) || 0;
+    const p = Number(epPrecio.value) || 0;
+    epSubtot.value = '$ ' + num(c * p);
+  }
+  epProd.addEventListener('change', epLlenarPres);
+  epPres.addEventListener('change', function() { epActualizarLabel(); epCalcSub(); });
+  epCant.addEventListener('input', epCalcSub);
+  epPrecio.addEventListener('input', epCalcSub);
+  /* Inicializar: ocultar presentación si es huevos */
+  if (pd.producto === 'HUEVOS') {
+    epPres.value = 'MAPLE';
+    var initPresWrap = document.getElementById('ep_presWrap');
+    if (initPresWrap) initPresWrap.style.display = 'none';
+  }
+  epActualizarLabel();
+
+  document.getElementById('formEditPd').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cliente = document.getElementById('ep_cliente').value.trim();
+    const producto = epProd.value;
+    const presentacion = epPres.value;
+    const cantidadPres = Number(epCant.value) || 0;
+    const precioUnit = Number(epPrecio.value) || 0;
+    const nuevoEstado = document.getElementById('ep_estado').value;
+    const pagado = document.getElementById('ep_pagado').value === 'true';
+    const fechaNecesaria = document.getElementById('ep_fechaNecesaria').value || addDays(hoy, 1);
+    const fechaEntrega = document.getElementById('ep_fechaEntrega').value || '';
+    const fechaPago = document.getElementById('ep_fechaPago').value || '';
+    if (!cliente || cantidadPres < 1) { toast('Completá cliente y cantidad'); return; }
+    const cantBase = unidadesBase(producto, presentacion, cantidadPres);
+    const precioTotal = cantidadPres * precioUnit;
+    const datos = {
+      clienteNombre: cliente,
+      producto,
+      presentacion,
+      cantidadPresentacion: cantidadPres,
+      cantidadUnidadesBase: cantBase,
+      precioTotal,
+      estado: nuevoEstado,
+      pagado,
+      fechaNecesaria,
+      fechaEntrega,
+      fechaPago
+    };
+    /* Si el estado cambia a ENTREGADO y no tiene fechaEntrega, poner hoy */
+    if (nuevoEstado === 'ENTREGADO' && !fechaEntrega) datos.fechaEntrega = hoy;
+    /* Si se marca pagado y no tiene fechaPago, poner hoy */
+    if (pagado && !fechaPago) datos.fechaPago = hoy;
+    await actualizarPedido(pedidoId, datos);
+    cerrarEditarPedido();
+    toast('Pedido actualizado ✓');
+  });
 }
 
 function pedidoCard(pd, perms) {
@@ -1612,14 +1781,27 @@ function pedidoCard(pd, perms) {
   const esReservado = pd.estado === 'RESERVADO';
   const esEntregado = pd.estado === 'ENTREGADO';
   const esUrgente = esReservado && pd.fechaNecesaria && pd.fechaNecesaria < hoyGlobal();
+  /* Huevos siempre se muestran en maples + unidades */
+  var cantLabel, cantDisplay;
+  if (pd.producto === 'HUEVOS') {
+    if (pd.presentacion === 'MAPLE') {
+      cantLabel = 'maples';
+      cantDisplay = pd.cantidadPresentacion + ' maples';
+    } else {
+      cantDisplay = pd.cantidadPresentacion + ' ' + (pd.presentacion === 'DOCENA' ? 'docenas' : 'medias') + ' (= ' + pd.cantidadUnidadesBase + ' u. ≈ ' + (pd.cantidadUnidadesBase / 30).toFixed(1) + ' maples)';
+      cantLabel = 'maples';
+    }
+  } else {
+    cantLabel = 'frascos';
+    cantDisplay = pd.cantidadPresentacion + ' frascos';
+  }
   return '<div class="pedidoCard' + (esUrgente ? ' pedidoCard--urgente' : '') + '" style="border-left:3px solid ' + estadoColor + '">' +
     '<div class="pedidoCard__top">' +
       '<strong>' + escapeHtml(pd.clienteNombre) + '</strong>' +
       '<span class="pedidoCard__estado" style="color:' + estadoColor + '">' + ESTADO_LABEL[pd.estado] + '</span>' +
     '</div>' +
     '<div class="pedidoCard__body">' +
-      '<span>' + pd.producto + ' · ' + presLabel + ' × ' + pd.cantidadPresentacion +
-        (pd.producto === 'HUEVOS' ? ' <span class="muted">(= ' + pd.cantidadUnidadesBase + ' u.)</span>' : '') +
+      '<span>' + pd.producto + ' · ' + cantDisplay +
       '</span>' +
       (pd.precioTotal ? '<span class="pedidoCard__precio">$ ' + num(pd.precioTotal) + '</span>' : '') +
     '</div>' +
@@ -1629,12 +1811,13 @@ function pedidoCard(pd, perms) {
       (pd.fechaEntrega ? '<span>Entrega: ' + fmtDateShort(pd.fechaEntrega) + '</span>' : '') +
       (pd.pagado ? '<span style="color:#22C55E">✓ Pagado ' + (pd.fechaPago ? fmtDateShort(pd.fechaPago) : '') + '</span>' : '<span style="color:#F59E0B">○ Pendiente de pago</span>') +
     '</div>' +
-    (esReservado || esEntregado ? '<div class="pedidoCard__actions">' +
-      (esReservado ? '<button class="btn btn--sm btn--primary" data-entregar="' + pd.id + '">Marcar entregado</button>' : '') +
+    '<div class="pedidoCard__actions">' +
+      '<button class="btn btn--sm btn--secondary" data-editarpd="' + pd.id + '">✏️ Editar</button>' +
+      (esReservado ? '<button class="btn btn--sm btn--primary" data-entregar="' + pd.id + '">✅ Entregado</button>' : '') +
       (esReservado ? '<button class="btn btn--sm btn--ghost" data-cancelar="' + pd.id + '">Cancelar</button>' : '') +
-      (!pd.pagado ? '<button class="btn btn--sm btn--secondary" data-pagado="' + pd.id + '">Marcar pagado</button>' : '<button class="btn btn--sm btn--ghost" data-pagado="' + pd.id + '">Desmarcar pago</button>') +
-      (pd.estado === 'CANCELADO' || esEntregado ? '<button class="btn btn--sm btn--ghost" data-eliminarpd="' + pd.id + '" style="color:#EF4444">Eliminar</button>' : '') +
-    '</div>' : (pd.estado === 'CANCELADO' ? '<div class="pedidoCard__actions"><button class="btn btn--sm btn--ghost" data-eliminarpd="' + pd.id + '" style="color:#EF4444">Eliminar</button></div>' : '')) +
+      (!pd.pagado ? '<button class="btn btn--sm btn--secondary" data-pagado="' + pd.id + '">💰 Pagado</button>' : '<button class="btn btn--sm btn--ghost" data-pagado="' + pd.id + '">Desmarcar pago</button>') +
+      (pd.estado === 'CANCELADO' || esEntregado ? '<button class="btn btn--sm btn--ghost" data-eliminarpd="' + pd.id + '" style="color:#EF4444">🗑 Eliminar</button>' : '') +
+    '</div>' +
   '</div>';
 }
 
