@@ -1,0 +1,2176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Granja Ercilia</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B1120">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ercilia">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+/* ============ Tokens ============ */
+:root{--cream:#0B1120;--cream-2:#111827;--barnwood:#0D1B2A;--barnwood-dark:#0A1628;--yolk:#00D4FF;--yolk-light:#38BDF8;--yolk-dark:#0099CC;--leaf:#0EA5E9;--leaf-dark:#0284C7;--ink:#E2E8F0;--ink-soft:#94A3B8;--white:#1E293B;--danger:#FF4D6A;--danger-bg:#2D0A14;--warn:#FFB347;--warn-bg:#2D1F06;--ok:#00E676;--ok-bg:#0A2D1A;--line:#1E293B;--shadow-sm:0 1px 2px rgba(0,0,0,0.3);--shadow-md:0 10px 24px -14px rgba(0,0,0,0.5);--shadow-lg:0 18px 40px -18px rgba(0,0,0,0.6);}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:var(--cream-2);
+  font-family:'Inter',sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+.app{
+  max-width:480px;
+  margin:0 auto;
+  min-height:100vh;
+  min-height:100dvh;
+  background:var(--cream);
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  overflow-x:hidden;
+  box-shadow:0 0 60px rgba(0,0,0,0.06);
+}
+h1,h2,h3,h4{font-family:'Fraunces',serif;margin:0;color:var(--ink);}
+p{margin:0;}
+:focus-visible{outline:2px solid var(--yolk-dark); outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
+}
+
+/* ============ Header ============ */
+.appHeader{
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px 15px;
+  background:
+    radial-gradient(ellipse 80% 60% at 120% -20%, rgba(0,212,255,0.25), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 0% 120%, rgba(14,165,233,0.15), transparent 55%),
+    linear-gradient(165deg, #0D1B2A 0%, #0A1628 100%);
+  color:#F0F4F8;
+  box-shadow:0 1px 0 rgba(0,0,0,0.15), 0 6px 18px -10px rgba(0,0,0,0.5);
+}
+.appHeader__brand{display:flex; align-items:center; gap:11px;}
+.appHeader__mark{
+  width:36px; height:36px; border-radius:11px;
+  background:linear-gradient(160deg, var(--yolk-light), var(--yolk) 55%, var(--yolk-dark));
+  color:#F0F4F8;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.5), 0 3px 8px -2px rgba(0,0,0,0.3), 0 0 12px -2px rgba(0,212,255,0.4);
+}
+.appHeader__mark svg{width:19px; height:19px;}
+.appHeader__title{font-family:'Fraunces',serif; font-size:19px; font-weight:600; line-height:1.15; letter-spacing:-0.01em;}
+.appHeader__sub{font-size:11.5px; opacity:0.75; margin-top:2px;}
+.appHeader__gear{
+  width:38px; height:38px; border-radius:50%;
+  border:1px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.07);
+  color:#E2E8F0; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:background .15s ease, transform .15s ease;
+}
+.appHeader__gear svg{width:18px; height:18px;}
+.appHeader__gear:active{transform:scale(0.92); background:rgba(255,255,255,0.16);}
+
+/* ============ Main / views ============ */
+.appMain{flex:1; padding:18px 16px 100px; overflow-y:auto; overflow-x:hidden;}
+.view{display:none;}
+.view--active{display:block; animation:fadeIn .25s ease;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+/* ============ Hero ============ */
+.hero{
+  background:
+    radial-gradient(ellipse 80% 70% at 75% -15%, rgba(0,212,255,0.3), transparent 55%),
+    radial-gradient(ellipse 50% 60% at 10% 110%, rgba(14,165,233,0.2), transparent 55%),
+    linear-gradient(165deg, #0D1B2A 0%, #0A1628 100%);
+  color:#F0F4F8;
+  border-radius:22px;
+  padding:24px 22px 22px;
+  margin-bottom:18px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:var(--shadow-lg);
+}
+.hero::after{
+  content:'';
+  position:absolute; inset:0;
+  background-image:repeating-linear-gradient(115deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 26px);
+  pointer-events:none;
+}
+.hero__top{display:flex; align-items:flex-start; justify-content:space-between; position:relative;}
+.hero__eyebrow{font-size:12.5px; opacity:0.78; text-transform:capitalize;}
+.hero__egg{width:24px; height:24px; color:var(--yolk-light); opacity:0.95;}
+.hero__egg svg{width:100%; height:100%;}
+.hero__big{font-family:'Fraunces',serif; font-size:58px; font-weight:600; line-height:1; margin-top:16px; letter-spacing:-0.02em; position:relative; text-shadow:0 0 30px rgba(0,212,255,0.35),0 0 60px rgba(0,212,255,0.12);}
+.hero__label{font-size:13.5px; opacity:0.8; margin-top:5px; position:relative;}
+.hero__row{margin-top:16px; position:relative;}
+.hero__chip{
+  display:inline-flex; align-items:center; gap:6px;
+  background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18);
+  padding:6.5px 13px; border-radius:999px; font-size:12.5px;
+  backdrop-filter:blur(2px);
+}
+.hero__chip svg{width:14px; height:14px; color:var(--yolk-light);}
+
+/* ============ Alerts ============ */
+.alerts{display:flex; flex-direction:column; gap:9px; margin-bottom:18px;}
+.alertCard{
+  display:flex; align-items:flex-start; gap:10px;
+  padding:13px 14px; border-radius:13px; font-size:13px; line-height:1.45;
+  border:1px solid transparent; box-shadow:var(--shadow-sm);
+}
+.alertCard svg{width:18px; height:18px; flex:none; margin-top:1px;}
+.alertCard--warn{background:var(--warn-bg); color:#FFB347; border-color:#5C3D10;}
+.alertCard--danger{background:var(--danger-bg); color:#FF4D6A; border-color:#5C1A24;}
+.alertCard--ok2{background:var(--ok-bg); color:#00E676; border-color:#0A4D2A;}
+.modalSteps{margin:0; padding-left:19px; display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:var(--ink-soft); line-height:1.55;}
+.modalSteps li::marker{color:var(--yolk-dark); font-weight:700;}
+.modalSteps code, .modalNote code{background:var(--cream-2); padding:1.5px 6px; border-radius:6px; font-size:11.5px;}
+
+/* ============ Stat grid ============ */
+.statGrid{display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:18px;}
+.statCard{
+  background:var(--white); border-radius:15px; padding:14px 15px 15px;
+  border:1px solid rgba(0,212,255,0.1); border-left:4px solid var(--ok);
+  box-shadow:0 2px 12px -4px rgba(0,0,0,0.2);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.statCard--warn{border-left-color:var(--warn);}
+.statCard--danger{border-left-color:var(--danger);}
+.statCard__label{font-size:12px; color:var(--ink-soft);}
+.statCard__value{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin-top:3px; letter-spacing:-0.01em;}
+.statCard__sub{font-size:11px; color:var(--ink-soft); margin-top:3px;}
+
+/* ============ Panels ============ */
+.panel{
+  background:var(--white); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-radius:18px; padding:17px;
+  margin-bottom:15px; border:1px solid rgba(0,212,255,0.08);
+  box-shadow:0 4px 16px -6px rgba(0,0,0,0.1);
+}
+.panel__head{display:flex; align-items:center; justify-content:space-between; margin-bottom:13px;}
+.panel__head h3{font-size:16.5px; font-weight:600; letter-spacing:-0.005em;}
+.panel__head--tabs{flex-wrap:wrap; gap:8px;}
+.panel--actions{display:flex; gap:10px;}
+.panel--actions .btn{flex:1;}
+
+.segmented{display:flex; background:var(--cream-2); border-radius:11px; padding:3px;}
+.segmented button{
+  border:none; background:transparent; padding:7px 13px; border-radius:99px;
+  font-family:'Inter',sans-serif; font-size:12.5px; color:var(--ink-soft); cursor:pointer;
+  transition:background .15s ease, color .15s ease;
+}
+.segmented button.active{background:var(--white); color:var(--ink); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.14);}
+
+.chartsTwo{display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center;}
+.chartsTwo>div{position:relative; min-width:0; overflow:hidden;}
+@media (max-width:520px){ .chartsTwo{grid-template-columns:1fr;} }
+.panel canvas{max-width:100%!important; height:auto!important;}
+.panel{overflow:hidden;}
+
+.pedidoCard{background:rgba(30,41,59,0.6);border-radius:14px;padding:14px 16px;margin-bottom:10px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(0,212,255,0.08);}
+.pedidoCard__top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.pedidoCard__estado{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
+.pedidoCard__body{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:13.5px;margin-bottom:6px;}
+.pedidoCard__precio{font-weight:700;color:#00D4FF;}
+.pedidoCard__fechas{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+.pedidoCard__actions{display:flex;gap:8px;flex-wrap:wrap;padding-top:6px;border-top:1px solid rgba(0,212,255,0.06);}
+.pedidoCard--urgente{animation:pdPulse 2s ease-in-out infinite;border-left-color:#EF4444!important;}
+@keyframes pdPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 10px 2px rgba(239,68,68,0.18)}}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0;}
+.tbl th,.tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid rgba(0,212,255,0.08);white-space:nowrap;}
+.tbl th{color:var(--ink-soft);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;}
+.tbl td{color:var(--ink);}
+.tbl tr:hover td{background:rgba(0,212,255,0.04);}
+.btn--sm{padding:5px 12px;font-size:11.5px;border-radius:8px;}
+
+.emptyState{
+  text-align:center; padding:30px 12px; color:var(--ink-soft); font-size:13.5px;
+  border:1.5px dashed var(--line); border-radius:14px; background:var(--cream-2);
+}
+.emptyState p{margin-bottom:12px;}
+
+/* ============ Forms ============ */
+.form{display:flex; flex-direction:column; gap:13px;}
+.formRow2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+@media(max-width:440px){.formRow2{grid-template-columns:1fr;}}
+.field{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--ink-soft);}
+.field input, .field select, .field textarea{
+  font-family:'Inter',sans-serif; font-size:14.5px; color:var(--ink);
+  border:1.5px solid var(--line); border-radius:11px; padding:10.5px 12px;
+  background:var(--cream); outline:none;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.field input:focus, .field select:focus, .field textarea:focus{
+  border-color:var(--yolk-dark); box-shadow:0 0 0 3px rgba(0,212,255,0.18);
+}
+.fieldGroupTitle{font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); margin-top:3px;}
+.formTotal{font-size:13.5px; color:var(--ink-soft); background:var(--cream-2); padding:11px 13px; border-radius:11px;}
+.formTotal strong{color:var(--ink); font-family:'Fraunces',serif; font-size:16.5px;}
+.climaBadge{font-size:12px; color:var(--yolk-light); background:var(--cream-2); padding:8px 12px; border-radius:10px; border:1px solid rgba(0,212,255,0.1); display:flex; align-items:center; gap:8px; margin-top:-6px;}
+.climaBadge .climaIcon{font-size:16px;}
+.climaBadge .climaInfo{opacity:0.85;}
+
+.btn{
+  font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
+  border-radius:12px; padding:12.5px 16px; border:none; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  transition:transform .1s ease, filter .15s ease, box-shadow .15s ease;
+}
+.btn--primary{
+  background:linear-gradient(160deg, var(--yolk-light), var(--yolk) 60%, var(--yolk-dark));
+  color:var(--barnwood-dark);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.55), 0 8px 16px -8px rgba(0,212,255,0.45);
+}
+.btn--primary:active{filter:brightness(0.96); transform:translateY(1px); box-shadow:inset 0 1px 0 rgba(255,255,255,0.4);}
+.btn--secondary{background:linear-gradient(160deg, var(--leaf), var(--leaf-dark)); color:#F0F4F8; box-shadow:0 6px 14px -8px rgba(14,165,233,0.5);}
+.btn--secondary:active{transform:translateY(1px); filter:brightness(0.97);}
+.btn--ghost{background:var(--cream-2); color:var(--ink);}
+.btn--ghost:active{background:var(--line); transform:translateY(1px);}
+.btn[disabled]{opacity:0.45; cursor:not-allowed; transform:none; filter:none;}
+
+/* ============ Lists / tables ============ */
+.regRow{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+  padding:12px 0; border-bottom:1px solid var(--line);
+}
+.regRow:last-child{border-bottom:none;}
+.regRow__main{display:flex; flex-direction:column; gap:2px;}
+.regRow__top{font-size:13.5px; font-weight:500;}
+.regRow__sub{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+.regRow__obs{font-size:12px; color:var(--ink-soft); margin-top:4px; font-style:italic;}
+.regRow__actions{display:flex; gap:6px; flex:none;}
+
+.iconBtn{
+  border:none; background:var(--cream-2); color:var(--ink-soft);
+  width:32px; height:32px; border-radius:10px; flex:none;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  transition:background .15s ease, transform .1s ease, color .15s ease;
+}
+.iconBtn svg{width:16px; height:16px;}
+.iconBtn:active{transform:scale(0.92);}
+.iconBtn--danger{color:var(--danger);}
+.iconBtn--danger:active{background:var(--danger-bg);}
+.iconBtn--edit{color:var(--barnwood);}
+.iconBtn--edit:active{background:var(--warn-bg);}
+
+.tableWrap{overflow-x:auto; border-radius:12px;}
+.table{width:100%; border-collapse:collapse; font-size:13px;}
+.table th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
+  color:var(--ink-soft); padding:9px 7px; border-bottom:2px solid var(--line);
+}
+.table td{padding:9.5px 7px; border-bottom:1px solid var(--line);}
+.table tr:last-child td{border-bottom:none;}
+.table tr:hover td{background:rgba(0,212,255,0.06);}
+.muted{color:var(--ink-soft); font-size:11.5px;}
+
+/* ============ Bottom nav ============ */
+.bottomNav{
+  position:fixed; left:0; right:0; bottom:0;
+  max-width:480px; margin:0 auto;
+  display:flex;
+  background:
+    radial-gradient(ellipse 80% 60% at 0% 120%, rgba(14,165,233,0.1), transparent 55%),
+    linear-gradient(0deg, #0A1628 0%, #0D1B2A 100%);
+  box-shadow:0 -1px 0 rgba(0,212,255,0.15), 0 -8px 28px -12px rgba(0,0,0,0.5);
+  padding:7px 4px calc(7px + env(safe-area-inset-bottom));
+  z-index:30;
+}
+.navBtn{
+  flex:1; background:none; border:none; color:rgba(255,255,255,0.58);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:8px 2px; cursor:pointer; position:relative;
+  transition:color .15s ease;
+}
+.navIcon{position:relative; z-index:1;}
+.navIcon svg{width:20px; height:20px;}
+.navLabel{font-size:10px; font-family:'Inter',sans-serif; font-weight:500; position:relative; z-index:1;}
+.navBtn.active{color:var(--yolk-light);}
+.navBtn.active::before{
+  content:'';
+  position:absolute; top:1px; left:50%; transform:translateX(-50%);
+  width:34px; height:34px; border-radius:11px;
+  background:rgba(0,212,255,0.16);
+}
+.navBtn.locked{opacity:0.4;}
+.navLockDot{position:absolute; top:5px; right:22%; width:6px; height:6px; border-radius:50%; background:var(--danger); z-index:2;}
+
+/* ============ Modal (perfil / edición) ============ */
+.modal{
+  position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:50;
+  display:none; align-items:flex-end; justify-content:center;
+  backdrop-filter:blur(6px);
+}
+.modal--open{display:flex;}
+.modalCard{
+  width:100%; max-width:480px; background:var(--cream); border-radius:22px 22px 0 0;
+  padding:22px 18px calc(22px + env(safe-area-inset-bottom));
+  max-height:86vh; overflow-y:auto;
+  display:flex; flex-direction:column; gap:13px;
+  animation:slideUp .25s cubic-bezier(.22,.9,.32,1);
+  box-shadow:0 -20px 50px -20px rgba(0,0,0,0.35);
+  position:relative;
+}
+.modalCard::before{
+  content:'';
+  position:absolute; top:9px; left:50%; transform:translateX(-50%);
+  width:36px; height:4px; border-radius:99px; background:var(--line);
+}
+@keyframes slideUp{from{transform:translateY(28px); opacity:0;} to{opacity:1; transform:translateY(0);}}
+.modalCard__head{display:flex; align-items:center; justify-content:space-between; margin-top:6px;}
+.modalNote{font-size:12px; color:var(--ink-soft); line-height:1.55;}
+.modalSubhead{font-size:14.5px; font-weight:600; font-family:'Inter',sans-serif;}
+.modalRow{display:flex; gap:10px; flex-wrap:wrap;}
+.modalRow .btn{flex:1; min-width:150px; text-align:center;}
+.divider{height:1px; background:var(--line); margin:3px 0;}
+
+/* ============ Toast ============ */
+.toast{
+  position:fixed; left:50%; bottom:92px; transform:translate(-50%,14px);
+  background:var(--barnwood-dark); color:#F0F4F8; font-size:13px;
+  padding:11px 18px; border-radius:999px; opacity:0; pointer-events:none;
+  transition:all .3s cubic-bezier(.22,.9,.32,1); z-index:60; max-width:90%; text-align:center;
+  box-shadow:0 10px 26px -10px rgba(0,0,0,0.5), 0 0 16px -4px rgba(0,212,255,0.25);
+}
+.toast--show{opacity:1; transform:translate(-50%,0);}
+
+::selection{background:var(--yolk); color:var(--barnwood-dark);}
+
+/* === Neon glow for dark mode === */
+.hero{border:1px solid rgba(0,212,255,0.15);}
+.hero__big{text-shadow:0 0 30px rgba(0,212,255,0.35),0 0 60px rgba(0,212,255,0.12);}
+.btn--primary{box-shadow:0 0 16px -4px rgba(0,212,255,0.35),0 4px 12px -6px rgba(0,0,0,0.4);}
+.btn--primary:active{box-shadow:0 0 8px -2px rgba(0,212,255,0.25),0 2px 6px -4px rgba(0,0,0,0.5);}
+.btn--secondary{box-shadow:0 0 14px -4px rgba(14,165,233,0.3),0 4px 12px -6px rgba(0,0,0,0.4);}
+.appHeader__mark{box-shadow:0 0 12px -2px rgba(0,212,255,0.4),inset 0 1px 0 rgba(255,255,255,0.3);}
+.navBtn.active{text-shadow:0 0 8px rgba(0,212,255,0.4);}
+.navBtn.active::before{background:rgba(0,212,255,0.18);box-shadow:0 0 10px -2px rgba(0,212,255,0.3);}
+.panel{background:rgba(30,41,59,0.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(0,212,255,0.08);}
+.statCard{background:var(--white);border:1px solid rgba(0,212,255,0.08);}
+.field input,.field select,.field textarea{background:var(--white);color:var(--ink);border:1px solid rgba(0,212,255,0.15);}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--yolk);box-shadow:0 0 0 3px rgba(0,212,255,0.12);}
+.formTotal{background:var(--cream-2);border:1px solid rgba(0,212,255,0.08);}
+.table th{background:var(--cream-2);color:var(--ink-soft);}
+.table td{color:var(--ink);border-bottom-color:var(--line);}
+.toast{box-shadow:0 10px 26px -10px rgba(0,0,0,0.6),0 0 20px -6px rgba(0,212,255,0.3);}
+.iconBtn{background:var(--cream-2);color:var(--ink-soft);}
+.segmented{background:var(--cream-2);border:1px solid rgba(0,212,255,0.06);}
+.segmented button.active{background:var(--white);color:#00D4FF;font-weight:600;}
+.emptyState{background:var(--cream-2);border-color:rgba(0,212,255,0.1);}
+.modalCard{background:var(--cream);box-shadow:0 -20px 50px -20px rgba(0,0,0,0.6),0 0 30px -10px rgba(0,212,255,0.1);}
+.bottomNav{border-top:1px solid rgba(0,212,255,0.12);}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="appHeader">
+    <div class="appHeader__brand">
+      <div class="appHeader__mark">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8 2 5 9 5 14a7 7 0 0 0 14 0c0-5-3-12-7-12Z"/></svg>
+      </div>
+      <div>
+        <div class="appHeader__title">Granja Ercilia</div>
+        <div class="appHeader__sub">Control de producción de huevos</div>
+      </div>
+    </div>
+    <button class="appHeader__gear" id="btnPerfil" aria-label="Perfil y ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.55 1H19.5a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1Z"/></svg>
+    </button>
+  </header>
+
+  <main class="appMain" id="appMain">
+    <div class="view" id="view-inicio"></div>
+    <div class="view" id="view-registrar"></div>
+    <div class="view" id="view-pedidos"></div>
+    <div class="view" id="view-graficos"></div>
+    <div class="view" id="view-lotes"></div>
+    <div class="view" id="view-reportes"></div>
+  </main>
+
+  <nav class="bottomNav" id="bottomNav"></nav>
+  <div class="toast" id="toast"></div>
+  <div class="modal" id="modalPerfil"></div>
+  <div class="modal" id="modalEditar"></div>
+</div>
+
+<script>
+/* ===================== Granja Ercilia — lógica de la app ===================== */
+
+/* ---------- Almacenamiento con fallback (window.storage -> localStorage -> memoria) ---------- */
+const memStore = {};
+async function storeGet(key, shared) {
+  try {
+    if (window.storage && typeof window.storage.get === 'function') {
+      const r = await window.storage.get(key, !!shared);
+      return r ? r.value : null;
+    }
+  } catch (e) { /* key might not exist yet, or storage unavailable */ }
+  try {
+    const v = localStorage.getItem((shared ? 'shared:' : 'local:') + key);
+    if (v !== null) return v;
+  } catch (e) {}
+  return memStore[key] !== undefined ? memStore[key] : null;
+}
+async function storeSet(key, value, shared) {
+  memStore[key] = value;
+  try {
+    if (window.storage && typeof window.storage.set === 'function') {
+      await window.storage.set(key, value, !!shared);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    localStorage.setItem((shared ? 'shared:' : 'local:') + key, value);
+    return true;
+  } catch (e) {}
+  return false;
+}
+
+async function guardarRegistrosLocal() {
+  await storeSet('registros', JSON.stringify(state.registros), true);
+}
+async function guardarGalponesLocal() {
+  await storeSet('galpones', JSON.stringify(state.galpones), true);
+}
+async function guardarPedidosLocal() {
+  await storeSet('pedidos', JSON.stringify(state.pedidos), true);
+}
+
+/* ---------- Sincronización en la nube (Firebase Firestore) ---------- */
+let fbApp = null, db = null, cloudConfig = null;
+let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null;
+
+function loadCloudConfig() {
+  try {
+    const raw = localStorage.getItem('ge_cloud_config');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function saveCloudConfig(cfg) {
+  localStorage.setItem('ge_cloud_config', JSON.stringify(cfg));
+}
+function clearCloudConfig() {
+  localStorage.removeItem('ge_cloud_config');
+}
+function parseFirebaseConfigInput(text) {
+  const cleaned = text.trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+  try { return (new Function('return (' + cleaned + ')'))(); } catch (e) {}
+  return null;
+}
+
+async function initCloud(cfg) {
+  fbApp = firebase.initializeApp(cfg);
+  db = firebase.firestore();
+  await db.collection('galpones').limit(1).get();
+  cloudConfig = cfg;
+}
+
+function setupListeners() {
+  if (unsubRegistros) unsubRegistros();
+  if (unsubGalpones) unsubGalpones();
+  if (unsubPedidos) unsubPedidos();
+  unsubRegistros = db.collection('registros').onSnapshot(snap => {
+    state.registros = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización: ' + err.message); });
+  unsubGalpones = db.collection('galpones').onSnapshot(async snap => {
+    state.galpones = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    if (!state.galpones.length) {
+      const def = { nombre: 'Galpón 1', capacidad: 0 };
+      const ref = await db.collection('galpones').add(def);
+      state.galpones = [Object.assign({ id: ref.id }, def)];
+    }
+    onDataChanged();
+  }, err => { toast('Error de sincronización: ' + err.message); });
+  unsubPedidos = db.collection('pedidos').onSnapshot(snap => {
+    state.pedidos = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización pedidos: ' + err.message); });
+}
+
+function onDataChanged() {
+  renderNav();
+  if (!document.getElementById('bottomNav').childElementCount) return;
+  renderCurrentView();
+}
+
+/* ---------- Operaciones de datos (nube / local) ---------- */
+async function crearRegistro(reg) {
+  if (db) {
+    const { id } = reg; const data = Object.assign({}, reg); delete data.id;
+    await db.collection('registros').doc(id).set(data);
+  } else {
+    state.registros.push(reg);
+    await guardarRegistrosLocal();
+    renderCurrentView();
+  }
+}
+async function actualizarRegistro(id, datosActualizados) {
+  if (db) {
+    await db.collection('registros').doc(id).update(datosActualizados);
+  } else {
+    const idx = state.registros.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      state.registros[idx] = Object.assign({}, state.registros[idx], datosActualizados);
+      await guardarRegistrosLocal();
+    }
+  }
+  renderCurrentView();
+}
+async function eliminarRegistroPorId(id) {
+  if (db) {
+    await db.collection('registros').doc(id).delete();
+  } else {
+    state.registros = state.registros.filter(r => r.id !== id);
+    await guardarRegistrosLocal();
+  }
+  renderCurrentView();
+}
+async function crearGalpon(g) {
+  if (db) {
+    const { id } = g; const data = Object.assign({}, g); delete data.id;
+    await db.collection('galpones').doc(id).set(data);
+  } else {
+    state.galpones.push(g);
+    await guardarGalponesLocal();
+    renderLotes();
+  }
+}
+async function actualizarGalpon(id, datosActualizados) {
+  if (db) {
+    await db.collection('galpones').doc(id).update(datosActualizados);
+  } else {
+    const idx = state.galpones.findIndex(g => g.id === id);
+    if (idx !== -1) {
+      state.galpones[idx] = Object.assign({}, state.galpones[idx], datosActualizados);
+      await guardarGalponesLocal();
+    }
+  }
+  renderLotes();
+}
+async function eliminarGalponPorId(id) {
+  if (db) {
+    await db.collection('galpones').doc(id).delete();
+  } else {
+    state.galpones = state.galpones.filter(g => g.id !== id);
+    await guardarGalponesLocal();
+    renderLotes();
+  }
+}
+
+/* ---------- Operaciones de pedidos (nube / local) ---------- */
+async function crearPedido(pedido) {
+  if (db) {
+    const { id } = pedido; const data = Object.assign({}, pedido); delete data.id;
+    await db.collection('pedidos').doc(id).set(data);
+  } else {
+    state.pedidos.push(pedido);
+    await guardarPedidosLocal();
+    renderCurrentView();
+  }
+}
+async function actualizarPedido(id, datos) {
+  if (db) {
+    await db.collection('pedidos').doc(id).update(datos);
+  } else {
+    const idx = state.pedidos.findIndex(p => p.id === id);
+    if (idx !== -1) { state.pedidos[idx] = Object.assign({}, state.pedidos[idx], datos); await guardarPedidosLocal(); }
+    renderCurrentView();
+  }
+}
+async function eliminarPedidoPorId(id) {
+  if (db) {
+    await db.collection('pedidos').doc(id).delete();
+  } else {
+    state.pedidos = state.pedidos.filter(p => p.id !== id);
+    await guardarPedidosLocal();
+    renderCurrentView();
+  }
+}
+async function restaurarDatos(registros, galpones, pedidos) {
+  if (db) {
+    const colecciones = ['registros', 'galpones', 'pedidos'];
+    for (const nombre of colecciones) {
+      const snap = await db.collection(nombre).get();
+      let batch = db.batch(); let count = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref); count++;
+        if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+      }
+      if (count) await batch.commit();
+    }
+    let batch = db.batch(); let count = 0;
+    for (const r of registros) {
+      const data = Object.assign({}, r); const id = data.id; delete data.id;
+      batch.set(db.collection('registros').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
+    for (const g of galpones) {
+      const data = Object.assign({}, g); const id = data.id; delete data.id;
+      batch.set(db.collection('galpones').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
+    for (const pd of (pedidos || [])) {
+      const data = Object.assign({}, pd); const id = data.id; delete data.id;
+      batch.set(db.collection('pedidos').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
+    if (count) await batch.commit();
+  } else {
+    state.registros = registros;
+    state.galpones = galpones;
+    state.pedidos = pedidos || [];
+    await guardarRegistrosLocal();
+    await guardarGalponesLocal();
+    await guardarPedidosLocal();
+  }
+}
+
+/* ---------- Estado global ---------- */
+const state = {
+  registros: [],
+  galpones: [],
+  pedidos: [],
+  perfil: { rol: 'Administrador', nombre: '' },
+  activeTab: 'inicio',
+  charts: {},
+  reportRange: { desde: null, hasta: null }
+};
+
+const PERMS = {
+  Administrador: { registrar: true, lotes: true, pedidos: true, reportes: true, borrarCualquiera: true, editarCualquiera: true },
+  Supervisor: { registrar: false, lotes: false, pedidos: true, reportes: true, borrarCualquiera: false, editarCualquiera: false },
+  Operario: { registrar: true, lotes: false, pedidos: false, reportes: false, borrarCualquiera: false, editarCualquiera: false }
+};
+
+const SIZE_KEYS = ['pequenos', 'medianos', 'grandes', 'extraGrandes'];
+const SIZE_LABELS = { pequenos: 'Pequeños', medianos: 'Medianos', grandes: 'Grandes', extraGrandes: 'Extra grandes' };
+const SIZE_COLORS = { pequenos: '#38BDF8', medianos: '#00D4FF', grandes: '#0099CC', extraGrandes: '#0D1B2A' };
+
+/* ---------- Productos y Presentaciones (Pedidos) ---------- */
+const PRODUCTOS = ['HUEVOS', 'MIEL'];
+const PRESENTACIONES = {
+  HUEVOS: [
+    { id: 'MAPLE', label: 'Maple (30 u.)', unidades: 30 },
+    { id: 'DOCENA', label: 'Docena (12 u.)', unidades: 12 },
+    { id: 'MEDIA_DOCENA', label: 'Media docena (6 u.)', unidades: 6 }
+  ],
+  MIEL: [
+    { id: 'FRASCO_1KG', label: 'Frasco 1 kg', unidades: 1 },
+    { id: 'FRASCO_500G', label: 'Frasco 500 g', unidades: 1 },
+    { id: 'FRASCO_250G', label: 'Frasco 250 g', unidades: 1 }
+  ]
+};
+function unidadesBase(producto, presentacionId, cantidad) {
+  const lista = PRESENTACIONES[producto] || [];
+  const pres = lista.find(p => p.id === presentacionId);
+  return pres ? cantidad * pres.unidades : 0;
+}
+function labelPresentacion(producto, presentacionId) {
+  const lista = PRESENTACIONES[producto] || [];
+  const pres = lista.find(p => p.id === presentacionId);
+  return pres ? pres.label : presentacionId;
+}
+
+/* ---------- Clima automático (Open-Meteo) ---------- */
+let climaCache = null;
+let climaCacheFecha = null;
+
+function obtenerClima() {
+  return new Promise(resolve => {
+    if (climaCache && climaCacheFecha === todayStr()) {
+      resolve(climaCache);
+      return;
+    }
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&current=temperature_2m,relative_humidity_2m&timezone=auto';
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const data = await resp.json();
+          const temp = data.current && data.current.temperature_2m != null ? data.current.temperature_2m : null;
+          const hum = data.current && data.current.relative_humidity_2m != null ? data.current.relative_humidity_2m : null;
+          if (temp !== null && hum !== null) {
+            climaCache = { temp, hum };
+            climaCacheFecha = todayStr();
+            resolve(climaCache);
+          } else { resolve(null); }
+        } catch (e) { console.warn('Error clima:', e); resolve(null); }
+      },
+      () => resolve(null),
+      { timeout: 8000, maximumAge: 300000 }
+    );
+  });
+}
+
+/* ---------- Utilidades de fecha ---------- */
+function pad2(n) { return String(n).padStart(2, '0'); }
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function hoyGlobal() { return todayStr(); }
+function nowTimeStr() {
+  const d = new Date();
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function parseDate(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function fmtDateShort(str) {
+  if (!str) return '—';
+  try { const d = parseDate(str); const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']; return d.getDate() + ' ' + meses[d.getMonth()]; } catch(e) { return str; }
+}
+function fmtDateLong(str) {
+  const d = parseDate(str);
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return d.getDate() + ' de ' + meses[d.getMonth()] + ' de ' + d.getFullYear();
+}
+function addDays(str, n) {
+  const d = parseDate(str);
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function startOfWeek(str) {
+  const d = parseDate(str);
+  const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function monthKey(str) { return str.slice(0, 7); }
+function fmtMonthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return meses[m - 1] + ' ' + y;
+}
+function num(n) { return (n || 0).toLocaleString('es-AR'); }
+function pct(n) { return (n || 0).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + '%'; }
+
+/* ---------- Cálculos sobre registros ---------- */
+function totalRegistro(r) {
+  return SIZE_KEYS.reduce((s, k) => s + (Number(r[k]) || 0), 0) + (Number(r.rotos) || 0) + (Number(r.sucios) || 0);
+}
+function clasificadosRegistro(r) {
+  return SIZE_KEYS.reduce((s, k) => s + (Number(r[k]) || 0), 0);
+}
+function filtrarRango(desde, hasta) {
+  return state.registros.filter(r => r.fecha >= desde && r.fecha <= hasta);
+}
+function agregados(lista) {
+  const agg = { pequenos: 0, medianos: 0, grandes: 0, extraGrandes: 0, rotos: 0, sucios: 0, total: 0 };
+  lista.forEach(r => {
+    SIZE_KEYS.forEach(k => agg[k] += Number(r[k]) || 0);
+    agg.rotos += Number(r.rotos) || 0;
+    agg.sucios += Number(r.sucios) || 0;
+  });
+  agg.total = agg.pequenos + agg.medianos + agg.grandes + agg.extraGrandes + agg.rotos + agg.sucios;
+  return agg;
+}
+function diasConDatos(lista) {
+  return new Set(lista.map(r => r.fecha)).size;
+}
+function totalGallinas(galponIds) {
+  if (!galponIds) return state.galpones.reduce((s, g) => s + (Number(g.capacidad) || 0), 0);
+  return galponIds.reduce((s, gid) => { const g = state.galpones.find(x => x.id === gid); return s + (g && Number(g.capacidad) ? Number(g.capacidad) : 0); }, 0);
+}
+function picoPostura(huevos, galponIds) {
+  const aves = totalGallinas(galponIds);
+  return aves > 0 ? (huevos / aves) * 100 : null;
+}
+
+/* ---------- Alertas ---------- */
+function computeAlerts() {
+  const alerts = [];
+  const hoy = todayStr();
+  const hoyRegs = filtrarRango(hoy, hoy);
+  if (hoyRegs.length) {
+    const aggHoy = agregados(hoyRegs);
+    const rotosPct = aggHoy.total ? (aggHoy.rotos / aggHoy.total) * 100 : 0;
+    if (rotosPct > 6) {
+      alerts.push({ nivel: 'danger', texto: 'El porcentaje de huevos rotos hoy es de ' + pct(rotosPct) + ', muy por encima de lo normal.' });
+    } else if (rotosPct > 3) {
+      alerts.push({ nivel: 'warn', texto: 'El porcentaje de huevos rotos hoy subió a ' + pct(rotosPct) + '.' });
+    }
+    const sucPct = aggHoy.total ? (aggHoy.sucios / aggHoy.total) * 100 : 0;
+    if (aggHoy.sucios > 10 || sucPct > 5) {
+      alerts.push({ nivel: 'warn', texto: 'Hay ' + num(aggHoy.sucios) + ' huevos sucios o descartados hoy (' + pct(sucPct) + ').' });
+    }
+    const desdeSemana = addDays(hoy, -7);
+    const hastaAyer = addDays(hoy, -1);
+    const previos = filtrarRango(desdeSemana, hastaAyer);
+    const diasPrevios = diasConDatos(previos);
+    if (diasPrevios >= 3) {
+      const aggPrev = agregados(previos);
+      const promedioPrevio = aggPrev.total / diasPrevios;
+      if (promedioPrevio > 0) {
+        const caida = ((promedioPrevio - aggHoy.total) / promedioPrevio) * 100;
+        if (caida > 40) {
+          alerts.push({ nivel: 'danger', texto: 'La producción de hoy cayó ' + pct(caida) + ' respecto al promedio de los últimos días.' });
+        } else if (caida > 20) {
+          alerts.push({ nivel: 'warn', texto: 'La producción de hoy está ' + pct(caida) + ' por debajo del promedio reciente.' });
+        }
+      }
+    }
+  }
+  return alerts;
+}
+
+/* ---------- Íconos SVG ---------- */
+const ICONS = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 8v8M8 12h8"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>',
+  barn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10L12 4l9 6v11"/><path d="M3 10h18"/><path d="M9 21v-7h6v7"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.55 1H19.5a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  flat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17.5v.1"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  egg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8 2 5 9 5 14a7 7 0 0 0 14 0c0-5-3-12-7-12Z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16L12 21L3 16V8L12 3L21 8Z"/><path d="M12 12L21 8"/><path d="M12 12V21"/><path d="M12 12L3 8"/></svg>'
+};
+
+/* ---------- Render: shell / navegación ---------- */
+const TABS = [
+  { id: 'inicio', label: 'Inicio', icon: 'home' },
+  { id: 'registrar', label: 'Registrar', icon: 'plus' },
+  { id: 'pedidos', label: 'Pedidos', icon: 'box' },
+  { id: 'graficos', label: 'Gráficos', icon: 'chart' },
+  { id: 'lotes', label: 'Galpones', icon: 'barn' },
+  { id: 'reportes', label: 'Reportes', icon: 'doc' }
+];
+
+function canAccess(tabId) {
+  const p = PERMS[state.perfil.rol] || PERMS.Operario;
+  if (tabId === 'registrar') return p.registrar;
+  if (tabId === 'lotes') return p.lotes;
+  if (tabId === 'pedidos') return p.pedidos;
+  if (tabId === 'reportes') return p.reportes;
+  return true;
+}
+
+function renderNav() {
+  const nav = document.getElementById('bottomNav');
+  nav.innerHTML = TABS.map(t => {
+    const active = state.activeTab === t.id;
+    const locked = !canAccess(t.id);
+    return '<button class="navBtn' + (active ? ' active' : '') + (locked ? ' locked' : '') + '" data-tab="' + t.id + '" aria-label="' + t.label + '">' +
+      '<span class="navIcon">' + ICONS[t.icon] + '</span>' +
+      '<span class="navLabel">' + t.label + '</span>' +
+      (locked ? '<span class="navLockDot" title="Requiere otro rol"></span>' : '') +
+      '</button>';
+  }).join('');
+  nav.querySelectorAll('.navBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-tab');
+      if (!canAccess(id)) {
+        toast('Tu rol (' + state.perfil.rol + ') no tiene acceso a "' + TABS.find(t => t.id === id).label + '".');
+        return;
+      }
+      setTab(id);
+    });
+  });
+}
+
+function setTab(id) {
+  state.activeTab = id;
+  renderNav();
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('view--active'));
+  const el = document.getElementById('view-' + id);
+  if (el) el.classList.add('view--active');
+  document.getElementById('appMain').scrollTop = 0;
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  try {
+    if (state.activeTab === 'inicio') renderInicio();
+    else if (state.activeTab === 'registrar') renderRegistrar();
+    else if (state.activeTab === 'pedidos') renderPedidos();
+    else if (state.activeTab === 'graficos') renderGraficos();
+    else if (state.activeTab === 'lotes') renderLotes();
+    else if (state.activeTab === 'reportes') renderReportes();
+  } catch(e) {
+    console.error('renderCurrentView error:', e);
+    try { toast('Error al renderizar: ' + e.message); } catch(e2) {}
+  }
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('toast--show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('toast--show'), 2600);
+}
+
+/* ---------- Render: Inicio (dashboard) ---------- */
+function renderInicio() {
+  const el = document.getElementById('view-inicio');
+  const hoy = todayStr();
+  const inicioSemana = startOfWeek(hoy);
+  const inicioMes = hoy.slice(0, 8) + '01';
+
+  const aggHoy = agregados(filtrarRango(hoy, hoy));
+  const aggSemana = agregados(filtrarRango(inicioSemana, hoy));
+  const aggMes = agregados(filtrarRango(inicioMes, hoy));
+  const rotosPctHoy = aggHoy.total ? (aggHoy.rotos / aggHoy.total) * 100 : 0;
+
+  const desde30 = addDays(hoy, -29);
+  const regs30 = filtrarRango(desde30, hoy);
+  const dias30 = diasConDatos(regs30);
+  const promedioDiario = dias30 ? agregados(regs30).total / dias30 : 0;
+
+  const desdeSemPrev = addDays(hoy, -13);
+  const semActual = agregados(filtrarRango(addDays(hoy, -6), hoy)).total;
+  const semPrevia = agregados(filtrarRango(desdeSemPrev, addDays(hoy, -7))).total;
+  let tendTexto = 'Sin datos suficientes todavía';
+  let tendIcon = 'flat';
+  if (semPrevia > 0) {
+    const cambio = ((semActual - semPrevia) / semPrevia) * 100;
+    if (Math.abs(cambio) < 2) { tendTexto = 'Producción estable esta semana'; tendIcon = 'flat'; }
+    else if (cambio > 0) { tendTexto = 'Subió ' + pct(cambio) + ' vs. la semana anterior'; tendIcon = 'up'; }
+    else { tendTexto = 'Bajó ' + pct(Math.abs(cambio)) + ' vs. la semana anterior'; tendIcon = 'down'; }
+  }
+
+  const alerts = computeAlerts();
+  const rotosClase = rotosPctHoy > 6 ? 'danger' : rotosPctHoy > 3 ? 'warn' : 'ok';
+
+  el.innerHTML =
+    '<section class="hero">' +
+      '<div class="hero__top"><span class="hero__eyebrow">' + fmtDateLong(hoy) + '</span><span class="hero__egg">' + ICONS.egg + '</span></div>' +
+      '<div class="hero__big">' + num(aggHoy.total) + '</div>' +
+      '<div class="hero__label">huevos recolectados hoy</div>' +
+      '<div class="hero__row"><span class="hero__chip">' + ICONS[tendIcon] + ' ' + tendTexto + '</span></div>' +
+    '</section>' +
+
+    (alerts.length ? '<section class="alerts">' + alerts.map(a =>
+      '<div class="alertCard alertCard--' + a.nivel + '">' + ICONS.alert + '<span>' + a.texto + '</span></div>'
+    ).join('') + '</section>' : '') +
+
+    '<section class="statGrid">' +
+      statCard('Semana', num(aggSemana.total), 'huevos', 'ok') +
+      statCard('Mes', num(aggMes.total), 'huevos', 'ok') +
+      statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
+      statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
+      (function() { const pp = picoPostura(aggHoy.total); return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Clasificación de hoy</h3></div>' +
+      (aggHoy.total ? '<canvas id="chartHoyBarras" height="180"></canvas>' : emptyState('Todavía no cargaste producción hoy.', 'Registrar ahora')) +
+    '</section>';
+
+  try { if (aggHoy.total) { drawBarPorTamano('chartHoyBarras', aggHoy); } } catch(chartErr) { console.warn('Chart error:', chartErr); }
+
+  el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => setTab(b.getAttribute('data-goto'))));
+}
+
+function statCard(label, value, sub, tone) {
+  return '<div class="statCard statCard--' + tone + '">' +
+    '<div class="statCard__label">' + label + '</div>' +
+    '<div class="statCard__value">' + value + '</div>' +
+    '<div class="statCard__sub">' + sub + '</div>' +
+  '</div>';
+}
+function emptyState(msg, cta) {
+  return '<div class="emptyState"><p>' + msg + '</p>' + (cta ? '<button class="btn btn--ghost" data-goto="registrar">' + cta + '</button>' : '') + '</div>';
+}
+
+/* ---------- Render: Registrar ---------- */
+function renderRegistrar() {
+  const el = document.getElementById('view-registrar');
+  if (!state.galpones.length) {
+    el.innerHTML = '<section class="panel">' + emptyState('Primero necesitás crear al menos un galpón en la sección Galpones.', null) + '</section>';
+    return;
+  }
+  const opcionesGalpon = state.galpones.map(g => '<option value="' + g.id + '">' + g.nombre + '</option>').join('');
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Nuevo registro</h3></div>' +
+      '<form id="formRegistro" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha</span><input type="date" id="f_fecha" value="' + todayStr() + '" required></label>' +
+          '<label class="field"><span>Hora</span><input type="time" id="f_hora" value="' + nowTimeStr() + '" required></label>' +
+        '</div>' +
+        '<label class="field"><span>Galpón / sector</span><select id="f_galpon">' + opcionesGalpon + '</select></label>' +
+        '<div class="fieldGroupTitle">Clasificación por tamaño</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Pequeños</span><input type="number" min="0" id="f_pequenos" value="0"></label>' +
+          '<label class="field"><span>Medianos</span><input type="number" min="0" id="f_medianos" value="0"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Grandes</span><input type="number" min="0" id="f_grandes" value="0"></label>' +
+          '<label class="field"><span>Extra grandes</span><input type="number" min="0" id="f_extraGrandes" value="0"></label>' +
+        '</div>' +
+        '<div class="fieldGroupTitle">Pérdidas</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Rotos</span><input type="number" min="0" id="f_rotos" value="0"></label>' +
+          '<label class="field"><span>Sucios / descartados</span><input type="number" min="0" id="f_sucios" value="0"></label>' +
+        '</div>' +
+        '<label class="field"><span>Observaciones</span><textarea id="f_obs" rows="2" placeholder="Opcional"></textarea></label>' +
+        '<div id="climaBadge" class="climaBadge" style="display:none;"></div>' +
+        '<div class="formTotal">Total recolectado: <strong id="f_total">0</strong> huevos</div>' +
+        '<button type="submit" class="btn btn--primary">Guardar registro</button>' +
+      '</form>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Registros</h3></div>' +
+      '<div class="formRow2" style="margin-bottom:10px;">' +
+        '<label class="field"><span>Ver fecha</span><input type="date" id="f_listafecha" value="' + todayStr() + '"></label>' +
+        '<button class="btn btn--ghost" id="btnVerTodos" style="align-self:flex-end;margin-top:4px;">Ver todos</button>' +
+      '</div>' +
+      '<div id="listaHoy"></div>' +
+    '</section>';
+
+  const form = document.getElementById('formRegistro');
+  const inputsNum = ['f_pequenos', 'f_medianos', 'f_grandes', 'f_extraGrandes', 'f_rotos', 'f_sucios'];
+  const updateTotal = () => {
+    const t = inputsNum.reduce((s, id) => s + (Number(document.getElementById(id).value) || 0), 0);
+    document.getElementById('f_total').textContent = num(t);
+  };
+  inputsNum.forEach(id => document.getElementById(id).addEventListener('input', updateTotal));
+
+  /* Carga automática de clima */
+  obtenerClima().then(clima => {
+    if (!clima) return;
+    const badge = document.getElementById('climaBadge');
+    if (badge) {
+      badge.style.display = 'flex';
+      badge.innerHTML = '<span class="climaIcon">🌡️</span><span class="climaInfo">' + clima.temp + '°C · ' + clima.hum + '% humedad</span>';
+    }
+    const obs = document.getElementById('f_obs');
+    if (obs && !obs.value.trim()) {
+      obs.value = '🌡️ ' + clima.temp + '°C · 💧 ' + clima.hum + '% humedad';
+    }
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const registro = {
+      id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      fecha: document.getElementById('f_fecha').value,
+      hora: document.getElementById('f_hora').value,
+      galponId: document.getElementById('f_galpon').value,
+      pequenos: Number(document.getElementById('f_pequenos').value) || 0,
+      medianos: Number(document.getElementById('f_medianos').value) || 0,
+      grandes: Number(document.getElementById('f_grandes').value) || 0,
+      extraGrandes: Number(document.getElementById('f_extraGrandes').value) || 0,
+      rotos: Number(document.getElementById('f_rotos').value) || 0,
+      sucios: Number(document.getElementById('f_sucios').value) || 0,
+      observaciones: document.getElementById('f_obs').value.trim(),
+      usuario: state.perfil.nombre || state.perfil.rol,
+      creadoEn: Date.now()
+    };
+    await crearRegistro(registro);
+    toast('Registro guardado ✓');
+    form.reset();
+    document.getElementById('f_fecha').value = todayStr();
+    document.getElementById('f_hora').value = nowTimeStr();
+    inputsNum.forEach(id => document.getElementById(id).value = 0);
+    updateTotal();
+    renderListaFiltrada(todayStr());
+  });
+
+  const fechaInput = document.getElementById('f_listafecha');
+  const btnVerTodos = document.getElementById('btnVerTodos');
+  if (fechaInput) fechaInput.addEventListener('change', () => {
+    renderListaFiltrada(fechaInput.value);
+  });
+  if (btnVerTodos) btnVerTodos.addEventListener('click', () => {
+    renderListaFiltrada(null);
+  });
+
+  renderListaFiltrada(todayStr());
+}
+
+function renderListaFiltrada(fecha) {
+  const cont = document.getElementById('listaHoy');
+  if (!cont) return;
+  let lista;
+  if (fecha) {
+    lista = state.registros.filter(r => r.fecha === fecha).sort((a, b) => b.creadoEn - a.creadoEn);
+  } else {
+    lista = state.registros.slice().sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+  }
+  if (!lista.length) {
+    cont.innerHTML = emptyState(fecha ? 'No hay registros el ' + fmtDateShort(fecha) + '.' : 'Todavía no hay registros.', null);
+    return;
+  }
+  const p = PERMS[state.perfil.rol] || PERMS.Operario;
+  cont.innerHTML = lista.map(r => {
+    const g = state.galpones.find(g => g.id === r.galponId);
+    const esPropio = r.usuario === (state.perfil.nombre || state.perfil.rol);
+    const puedeEditar = p.editarCualquiera || esPropio;
+    const puedeBorrar = p.borrarCualquiera || esPropio;
+    const detalleTam = SIZE_KEYS.map(k => { const v = Number(r[k]) || 0; return v ? SIZE_LABELS[k].slice(0,4) + ': ' + v : ''; }).filter(Boolean).join(' · ');
+    return '<div class="regRow">' +
+      '<div class="regRow__main">' +
+        '<div class="regRow__top"><strong>' + r.hora + '</strong> · ' + (g ? g.nombre : 'Sin galpón') + (fecha ? '' : ' · ' + fmtDateShort(r.fecha)) + '</div>' +
+        '<div class="regRow__sub">' + totalRegistro(r) + ' huevos · ' + r.rotos + ' rotos · ' + r.sucios + ' sucios</div>' +
+        (detalleTam ? '<div class="regRow__sub" style="font-size:11px;color:var(--yolk-light);">' + detalleTam + '</div>' : '') +
+        (r.observaciones ? '<div class="regRow__obs">' + escapeHtml(r.observaciones) + '</div>' : '') +
+      '</div>' +
+      '<div class="regRow__actions">' +
+        (puedeEditar ? '<button class="iconBtn iconBtn--edit" data-editr="' + r.id + '" aria-label="Editar">' + ICONS.pencil + '</button>' : '') +
+        (puedeBorrar ? '<button class="iconBtn iconBtn--danger" data-del="' + r.id + '" aria-label="Eliminar">' + ICONS.trash + '</button>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+  cont.querySelectorAll('[data-editr]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.getAttribute('data-editr');
+    abrirEditarRegistroModal(id);
+  }));
+  cont.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-del');
+    if (!confirm('¿Eliminar este registro?')) return;
+    await eliminarRegistroPorId(id);
+    toast('Registro eliminado');
+  }));
+}
+
+function renderListaHoy() {
+  const cont = document.getElementById('listaHoy');
+  if (!cont) return;
+  renderListaFiltrada(todayStr());
+}
+
+function escapeHtml(s) {
+  return s ? s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
+}
+
+/* ---------- Modal Editar Registro / Galpón ---------- */
+function abrirEditarRegistroModal(id) {
+  const r = state.registros.find(reg => reg.id === id);
+  if (!r) return;
+  const modal = document.getElementById('modalEditar');
+  const opcionesGalpon = state.galpones.map(g => '<option value="' + g.id + '"' + (g.id === r.galponId ? ' selected' : '') + '>' + g.nombre + '</option>').join('');
+
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>Editar registro</h3><button class="iconBtn" id="cerrarEditar">' + ICONS.x + '</button></div>' +
+      '<form id="formEditarRegistro" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha</span><input type="date" id="ef_fecha" value="' + r.fecha + '" required></label>' +
+          '<label class="field"><span>Hora</span><input type="time" id="ef_hora" value="' + r.hora + '" required></label>' +
+        '</div>' +
+        '<label class="field"><span>Galpón / sector</span><select id="ef_galpon">' + opcionesGalpon + '</select></label>' +
+        '<div class="fieldGroupTitle">Clasificación por tamaño</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Pequeños</span><input type="number" min="0" id="ef_pequenos" value="' + (r.pequenos || 0) + '"></label>' +
+          '<label class="field"><span>Medianos</span><input type="number" min="0" id="ef_medianos" value="' + (r.medianos || 0) + '"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Grandes</span><input type="number" min="0" id="ef_grandes" value="' + (r.grandes || 0) + '"></label>' +
+          '<label class="field"><span>Extra grandes</span><input type="number" min="0" id="ef_extraGrandes" value="' + (r.extraGrandes || 0) + '"></label>' +
+        '</div>' +
+        '<div class="fieldGroupTitle">Pérdidas</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Rotos</span><input type="number" min="0" id="ef_rotos" value="' + (r.rotos || 0) + '"></label>' +
+          '<label class="field"><span>Sucios / descartados</span><input type="number" min="0" id="ef_sucios" value="' + (r.sucios || 0) + '"></label>' +
+        '</div>' +
+        '<label class="field"><span>Observaciones</span><textarea id="ef_obs" rows="2">' + escapeHtml(r.observaciones || '') + '</textarea></label>' +
+        '<div class="formTotal">Total recolectado: <strong id="ef_total">' + num(totalRegistro(r)) + '</strong> huevos</div>' +
+        '<button type="submit" class="btn btn--primary">Guardar cambios</button>' +
+      '</form>' +
+    '</div>';
+
+  modal.classList.add('modal--open');
+  document.getElementById('cerrarEditar').addEventListener('click', () => modal.classList.remove('modal--open'));
+
+  const inputsNum = ['ef_pequenos', 'ef_medianos', 'ef_grandes', 'ef_extraGrandes', 'ef_rotos', 'ef_sucios'];
+  const updateTotal = () => {
+    const t = inputsNum.reduce((s, inputId) => s + (Number(document.getElementById(inputId).value) || 0), 0);
+    document.getElementById('ef_total').textContent = num(t);
+  };
+  inputsNum.forEach(inputId => document.getElementById(inputId).addEventListener('input', updateTotal));
+
+  document.getElementById('formEditarRegistro').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const datosActualizados = {
+      fecha: document.getElementById('ef_fecha').value,
+      hora: document.getElementById('ef_hora').value,
+      galponId: document.getElementById('ef_galpon').value,
+      pequenos: Number(document.getElementById('ef_pequenos').value) || 0,
+      medianos: Number(document.getElementById('ef_medianos').value) || 0,
+      grandes: Number(document.getElementById('ef_grandes').value) || 0,
+      extraGrandes: Number(document.getElementById('ef_extraGrandes').value) || 0,
+      rotos: Number(document.getElementById('ef_rotos').value) || 0,
+      sucios: Number(document.getElementById('ef_sucios').value) || 0,
+      observaciones: document.getElementById('ef_obs').value.trim()
+    };
+    await actualizarRegistro(id, datosActualizados);
+    toast('Registro modificado ✓');
+    modal.classList.remove('modal--open');
+  });
+}
+
+/* editar galpon eliminado por solicitud del usuario */
+
+/* ---------- Render: Gráficos ---------- */
+let graficosPeriodo = 'semana';
+function renderGraficos() {
+  const el = document.getElementById('view-graficos');
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head panel__head--tabs">' +
+        '<h3>Distribución</h3>' +
+        '<div class="segmented" id="segPeriodo">' +
+          '<button data-p="hoy" class="' + (graficosPeriodo === 'hoy' ? 'active' : '') + '">Hoy</button>' +
+          '<button data-p="semana" class="' + (graficosPeriodo === 'semana' ? 'active' : '') + '">Semana</button>' +
+          '<button data-p="mes" class="' + (graficosPeriodo === 'mes' ? 'active' : '') + '">Mes</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="chartsTwo">' +
+        '<div><canvas id="chartBarrasTam" height="200"></canvas></div>' +
+        '<div><canvas id="chartTorta" height="200"></canvas></div>' +
+      '</div>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Evolución diaria (últimos 30 días)</h3></div>' +
+      '<canvas id="chartEvolucion" height="200"></canvas>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Comparación semanal</h3></div>' +
+      '<canvas id="chartSemanas" height="200"></canvas>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Comparación mensual</h3></div>' +
+      '<canvas id="chartMeses" height="200"></canvas>' +
+    '</section>';
+
+  document.querySelectorAll('#segPeriodo button').forEach(b => b.addEventListener('click', () => {
+    graficosPeriodo = b.getAttribute('data-p');
+    renderGraficos();
+  }));
+
+  const hoy = todayStr();
+  let desde, hasta = hoy;
+  if (graficosPeriodo === 'hoy') desde = hoy;
+  else if (graficosPeriodo === 'semana') desde = startOfWeek(hoy);
+  else desde = hoy.slice(0, 8) + '01';
+  const agg = agregados(filtrarRango(desde, hasta));
+
+  if (agg.total) {
+    drawBarPorTamano('chartBarrasTam', agg);
+    drawTorta('chartTorta', agg);
+  } else {
+    document.getElementById('chartBarrasTam').replaceWith(elFromHtml(emptyState('Sin datos en este período.', null)));
+    document.getElementById('chartTorta').remove();
+  }
+
+  drawEvolucionDiaria('chartEvolucion');
+  drawComparacionSemanal('chartSemanas');
+  drawComparacionMensual('chartMeses');
+}
+
+function elFromHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.firstChild;
+}
+
+/* ---------- Render: Lotes / Galpones ---------- */
+function renderLotes() {
+  const el = document.getElementById('view-lotes');
+  const hoy = todayStr();
+  const inicioSemana = startOfWeek(hoy);
+  const filas = state.galpones.map(g => {
+    const regsG = state.registros.filter(r => r.galponId === g.id);
+    const hoyG = agregados(regsG.filter(r => r.fecha === hoy)).total;
+    const semG = agregados(regsG.filter(r => r.fecha >= inicioSemana && r.fecha <= hoy)).total;
+    const mesG = agregados(regsG.filter(r => r.fecha >= hoy.slice(0, 8) + '01' && r.fecha <= hoy)).total;
+    return { g, hoyG, semG, mesG };
+  });
+
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Nuevo galpón / sector</h3></div>' +
+      '<form id="formGalpon" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Nombre</span><input type="text" id="g_nombre" placeholder="Ej: Galpón 3" required></label>' +
+          '<label class="field"><span>Capacidad (aves)</span><input type="number" min="0" id="g_capacidad" placeholder="Opcional"></label>' +
+        '</div>' +
+        '<button type="submit" class="btn btn--primary">Agregar galpón</button>' +
+      '</form>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
+      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th></tr></thead><tbody>' +
+        filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + '</td>' +
+          '<td>' + num(f.hoyG) + '</td>' +
+          '<td>' + (function() { const pp = picoPostura(f.hoyG, [f.g.id]); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
+          '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
+          '<td>—</td></tr>').join('') +
+        '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
+    '</section>' +
+    (filas.length ? '<section class="panel"><div class="panel__head"><h3>Comparación entre galpones (mes)</h3></div><canvas id="chartGalpones" height="220"></canvas></section>' : '');
+
+  document.getElementById('formGalpon').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre = document.getElementById('g_nombre').value.trim();
+    if (!nombre) return;
+    const nuevoGalpon = { id: 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), nombre, capacidad: Number(document.getElementById('g_capacidad').value) || 0 };
+    await crearGalpon(nuevoGalpon);
+    toast('Galpón agregado ✓');
+  });
+
+  /* Editar y eliminar galpones deshabilitados por solicitud del usuario */
+
+  if (filas.length) {
+    drawComparacionGalpones('chartGalpones', filas);
+  }
+}
+
+/* ---------- Render: Pedidos (Reservas / Ventas) ---------- */
+const ESTADO_LABEL = { RESERVADO: 'Reservado', ENTREGADO: 'Entregado', CANCELADO: 'Cancelado' };
+const ESTADO_COLOR = { RESERVADO: '#00D4FF', ENTREGADO: '#22C55E', CANCELADO: '#EF4444' };
+
+function renderPedidos() {
+  const el = document.getElementById('view-pedidos');
+  if (!el) { console.error('view-pedidos NOT FOUND in DOM'); return; }
+  try { _renderPedidosInner(el); } catch(e) {
+    console.error('renderPedidos error:', e);
+    el.innerHTML = '<section class="panel"><div class="panel__head"><h3>Error al cargar Pedidos</h3></div>' +
+      '<p style="color:#EF4444">Ocurrió un error: ' + escapeHtml(e.message) + '</p>' +
+      '<p class="muted">Recargá la página o contactá soporte si el problema persiste.</p></section>';
+    try { toast('Error en Pedidos: ' + e.message); } catch(e2) {}
+  }
+}
+function _renderPedidosInner(el) {
+  const hoy = todayStr();
+  const p = PERMS[state.perfil.rol] || PERMS.Operario;
+
+  const reservados = state.pedidos.filter(pd => pd.estado === 'RESERVADO');
+  const entregados = state.pedidos.filter(pd => pd.estado === 'ENTREGADO');
+  const cancelados = state.pedidos.filter(pd => pd.estado === 'CANCELADO');
+
+  const totalReservadoEgg = reservados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
+  const totalReservadoMiel = reservados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+  const totalEntregadoEgg = entregados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
+  const totalEntregadoMiel = entregados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Nuevo pedido / reserva</h3></div>' +
+      '<form id="formPedido" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Cliente</span><input type="text" id="pd_cliente" placeholder="Nombre del cliente" required></label>' +
+          '<label class="field"><span>Producto</span><select id="pd_producto"><option value="HUEVOS">Huevos</option><option value="MIEL">Miel</option></select></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Presentación</span><select id="pd_presentacion"></select></label>' +
+          '<label class="field"><span>Cantidad</span><input type="number" min="1" id="pd_cantidad" placeholder="Ej: 2" required value="1"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha necesaria</span><input type="date" id="pd_fechaNecesaria" value="' + addDays(hoy, 1) + '" required></label>' +
+          '<label class="field" id="pd_subtotalWrap"><span>Subtotal</span><input type="text" id="pd_subtotal" readonly value="$ 0" style="font-weight:700;color:var(--yolk);background:transparent;border:none;"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Precio unitario ($)</span><input type="number" min="0" step="0.01" id="pd_precio" placeholder="Ej: 5000" value=""></label>' +
+          '<label class="field"><span></span></label>' +
+        '</div>' +
+        '<button type="submit" class="btn btn--primary">Registrar reserva</button>' +
+      '</form>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Resumen</h3></div>' +
+      '<div class="statGrid">' +
+        statCard('Reservas huevos', num(totalReservadoEgg), 'unidades pendientes', totalReservadoEgg ? 'ok' : 'ok') +
+        statCard('Reservas miel', num(totalReservadoMiel), 'unidades pendientes', totalReservadoMiel ? 'ok' : 'ok') +
+        statCard('Entregados huevos', num(totalEntregadoEgg), 'unidades', 'ok') +
+        statCard('Entregados miel', num(totalEntregadoMiel), 'unidades', 'ok') +
+      '</div>' +
+    '</section>' +
+
+    (reservados.length ? '<section class="panel"><div class="panel__head"><h3>Pendientes de entrega</h3></div>' +
+      reservados.map(pd => pedidoCard(pd, p)).join('') +
+    '</section>' : '') +
+
+    (entregados.length ? '<section class="panel"><div class="panel__head"><h3>Entregados</h3></div>' +
+      entregados.sort((a, b) => (b.fechaEntrega || b.fechaReserva).localeCompare(a.fechaEntrega || a.fechaReserva)).slice(0, 30).map(pd => pedidoCard(pd, p)).join('') +
+    '</section>' : '') +
+
+    (cancelados.length ? '<section class="panel"><div class="panel__head"><h3>Cancelados</h3></div>' +
+      cancelados.map(pd => pedidoCard(pd, p)).join('') +
+    '</section>' : '') +
+
+    '<section class="panel" id="secReportePedidos">' +
+      '<div class="panel__head"><h3>📊 Reporte de Reservas / Ventas</h3></div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>Desde</span><input type="date" id="rp_desde" value="' + addDays(hoy, -30) + '"></label>' +
+        '<label class="field"><span>Hasta</span><input type="date" id="rp_hasta" value="' + hoy + '"></label>' +
+      '</div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>Producto</span><select id="rp_producto"><option value="">Todos</option><option value="HUEVOS">Huevos</option><option value="MIEL">Miel</option></select></label>' +
+        '<label class="field"><span>Estado</span><select id="rp_estado"><option value="">Todos</option><option value="RESERVADO">Reservado</option><option value="ENTREGADO">Entregado</option><option value="CANCELADO">Cancelado</option></select></label>' +
+      '</div>' +
+      '<div id="rp_resultados"></div>' +
+    '</section>';
+
+  /* --- Lógica del reporte de pedidos --- */
+  function actualizarReportePedidos() {
+    const desde = document.getElementById('rp_desde').value;
+    const hasta = document.getElementById('rp_hasta').value;
+    const prodFiltro = document.getElementById('rp_producto').value;
+    const estadoFiltro = document.getElementById('rp_estado').value;
+    let lista = state.pedidos.filter(pd => {
+      const fRef = pd.fechaNecesaria || pd.fechaReserva;
+      return fRef >= desde && fRef <= hasta;
+    });
+    if (prodFiltro) lista = lista.filter(pd => pd.producto === prodFiltro);
+    if (estadoFiltro) lista = lista.filter(pd => pd.estado === estadoFiltro);
+
+    const reservadosF = lista.filter(pd => pd.estado === 'RESERVADO');
+    const entregadosF = lista.filter(pd => pd.estado === 'ENTREGADO');
+    const canceladosF = lista.filter(pd => pd.estado === 'CANCELADO');
+
+    const totalEggRes = reservadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
+    const totalEggEnt = entregadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
+    const totalMielRes = reservadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+    const totalMielEnt = entregadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+
+    const total$Reservados = reservadosF.reduce((s, pd) => s + (pd.precioTotal || 0), 0);
+    const total$Entregados = entregadosF.reduce((s, pd) => s + (pd.precioTotal || 0), 0);
+    const total$Pagados = entregadosF.filter(pd => pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
+    const total$Pendiente = entregadosF.filter(pd => !pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
+
+    /* Pedidos por día para la tabla */
+    const porDia = {};
+    lista.forEach(pd => {
+      const dia = pd.fechaNecesaria || pd.fechaReserva;
+      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0 };
+      if (pd.estado === 'RESERVADO') {
+        if (pd.producto === 'HUEVOS') porDia[dia].huevosRes += pd.cantidadUnidadesBase;
+        else porDia[dia].mielRes += pd.cantidadPresentacion;
+        porDia[dia].$reservado += (pd.precioTotal || 0);
+      }
+      if (pd.estado === 'ENTREGADO') {
+        if (pd.producto === 'HUEVOS') porDia[dia].huevosEnt += pd.cantidadUnidadesBase;
+        else porDia[dia].mielEnt += pd.cantidadPresentacion;
+        porDia[dia].$entregado += (pd.precioTotal || 0);
+      }
+    });
+    const dias = Object.keys(porDia).sort();
+
+    const cont = document.getElementById('rp_resultados');
+    if (!cont) return;
+    cont.innerHTML =
+      '<div class="statGrid">' +
+        statCard('Huevos reservados', num(totalEggRes), 'unidades', totalEggRes ? 'warn' : 'ok') +
+        statCard('Huevos entregados', num(totalEggEnt), 'unidades', 'ok') +
+        statCard('Miel reservada', num(totalMielRes), 'frascos', totalMielRes ? 'warn' : 'ok') +
+        statCard('Miel entregada', num(totalMielEnt), 'frascos', 'ok') +
+      '</div>' +
+      '<div class="statGrid">' +
+        statCard('$ Reservado', '$ ' + num(total$Reservados), 'pendiente de entrega', 'warn') +
+        statCard('$ Entregado', '$ ' + num(total$Entregados), 'ventas concretadas', 'ok') +
+        statCard('$ Cobrado', '$ ' + num(total$Pagados), 'pagos recibidos', 'ok') +
+        statCard('$ A cobrar', '$ ' + num(total$Pendiente), 'entregados sin pagar', 'danger') +
+      '</div>' +
+      (dias.length ?
+        '<div style="overflow-x:auto;margin-top:12px">' +
+        '<table class="tbl"><thead><tr>' +
+          '<th>Fecha necesaria</th><th>Huevos res.</th><th>Huevos ent.</th><th>Miel res.</th><th>Miel ent.</th><th>$ Reservado</th><th>$ Entregado</th>' +
+        '</tr></thead><tbody>' +
+        dias.map(d => {
+          const r = porDia[d];
+          const esHoy = d === hoy;
+          const rowStyle = esHoy ? 'style="background:rgba(0,212,255,0.08);font-weight:600"' : '';
+          return '<tr ' + rowStyle + '>' +
+            '<td>' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
+            '<td>' + (r.huevosRes || '-') + '</td>' +
+            '<td>' + (r.huevosEnt || '-') + '</td>' +
+            '<td>' + (r.mielRes || '-') + '</td>' +
+            '<td>' + (r.mielEnt || '-') + '</td>' +
+            '<td>$ ' + num(r.$reservado) + '</td>' +
+            '<td>$ ' + num(r.$entregado) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>' : '<p class="muted">Sin pedidos en el período seleccionado.</p>') +
+      (lista.length ? '<div style="margin-top:14px"><strong style="color:var(--ink-soft)">Detalle (' + lista.length + ' pedidos)</strong></div>' +
+        lista.sort((a, b) => (a.fechaNecesaria || a.fechaReserva).localeCompare(b.fechaNecesaria || b.fechaReserva)).map(pd => pedidoCard(pd, p)).join('') : '');
+  }
+  actualizarReportePedidos();
+  document.getElementById('rp_desde').addEventListener('change', actualizarReportePedidos);
+  document.getElementById('rp_hasta').addEventListener('change', actualizarReportePedidos);
+  document.getElementById('rp_producto').addEventListener('change', actualizarReportePedidos);
+  document.getElementById('rp_estado').addEventListener('change', actualizarReportePedidos);
+
+  /* --- Lógica del formulario --- */
+  const selProducto = document.getElementById('pd_producto');
+  const selPres = document.getElementById('pd_presentacion');
+  const inpCant = document.getElementById('pd_cantidad');
+  const inpPrecio = document.getElementById('pd_precio');
+  const inpSubtotal = document.getElementById('pd_subtotal');
+
+  function llenarPresentaciones() {
+    const prod = selProducto.value;
+    const lista = PRESENTACIONES[prod] || [];
+    selPres.innerHTML = lista.map(p => '<option value="' + p.id + '">' + p.label + '</option>').join('');
+    calcSubtotal();
+  }
+  function calcSubtotal() {
+    const prod = selProducto.value;
+    const presId = selPres.value;
+    const cant = Number(inpCant.value) || 0;
+    const precio = Number(inpPrecio.value) || 0;
+    const total = cant * precio;
+    inpSubtotal.value = '$ ' + num(total);
+  }
+  selProducto.addEventListener('change', llenarPresentaciones);
+  selPres.addEventListener('change', calcSubtotal);
+  inpCant.addEventListener('input', calcSubtotal);
+  inpPrecio.addEventListener('input', calcSubtotal);
+  llenarPresentaciones();
+
+  document.getElementById('formPedido').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cliente = document.getElementById('pd_cliente').value.trim();
+    const producto = selProducto.value;
+    const presentacion = selPres.value;
+    const cantidadPres = Number(inpCant.value) || 0;
+    const precioUnit = Number(inpPrecio.value) || 0;
+    if (!cliente || cantidadPres < 1) { toast('Completá cliente y cantidad'); return; }
+    const cantBase = unidadesBase(producto, presentacion, cantidadPres);
+    const precioTotal = cantidadPres * precioUnit;
+    const pedido = {
+      id: 'pd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      clienteNombre: cliente,
+      producto,
+      presentacion,
+      cantidadPresentacion: cantidadPres,
+      cantidadUnidadesBase: cantBase,
+      precioTotal,
+      estado: 'RESERVADO',
+      pagado: false,
+      fechaReserva: hoy,
+      fechaNecesaria: document.getElementById('pd_fechaNecesaria').value || addDays(hoy, 1),
+      fechaEntrega: '',
+      fechaPago: ''
+    };
+    await crearPedido(pedido);
+    toast('Reserva registrada para ' + cliente);
+  });
+
+  /* --- Botones de acción en cada card --- */
+  el.querySelectorAll('[data-entregar]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-entregar');
+    const hoy2 = todayStr();
+    await actualizarPedido(id, { estado: 'ENTREGADO', fechaEntrega: hoy2 });
+    toast('Pedido entregado ✓');
+  }));
+  el.querySelectorAll('[data-pagado]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-pagado');
+    const pedido = state.pedidos.find(p => p.id === id);
+    const nuevoPago = !(pedido && pedido.pagado);
+    const hoy2 = todayStr();
+    await actualizarPedido(id, { pagado: nuevoPago, fechaPago: nuevoPago ? hoy2 : '' });
+    toast(nuevoPago ? 'Marcado como pagado ✓' : 'Pago desmarcado');
+  }));
+  el.querySelectorAll('[data-cancelar]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-cancelar');
+    await actualizarPedido(id, { estado: 'CANCELADO' });
+    toast('Pedido cancelado');
+  }));
+  el.querySelectorAll('[data-eliminarpd]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-eliminarpd');
+    await eliminarPedidoPorId(id);
+    toast('Pedido eliminado');
+  }));
+}
+
+function pedidoCard(pd, perms) {
+  const presLabel = labelPresentacion(pd.producto, pd.presentacion);
+  const estadoColor = ESTADO_COLOR[pd.estado] || '#94A3B8';
+  const esReservado = pd.estado === 'RESERVADO';
+  const esEntregado = pd.estado === 'ENTREGADO';
+  const esUrgente = esReservado && pd.fechaNecesaria && pd.fechaNecesaria < hoyGlobal();
+  return '<div class="pedidoCard' + (esUrgente ? ' pedidoCard--urgente' : '') + '" style="border-left:3px solid ' + estadoColor + '">' +
+    '<div class="pedidoCard__top">' +
+      '<strong>' + escapeHtml(pd.clienteNombre) + '</strong>' +
+      '<span class="pedidoCard__estado" style="color:' + estadoColor + '">' + ESTADO_LABEL[pd.estado] + '</span>' +
+    '</div>' +
+    '<div class="pedidoCard__body">' +
+      '<span>' + pd.producto + ' · ' + presLabel + ' × ' + pd.cantidadPresentacion +
+        (pd.producto === 'HUEVOS' ? ' <span class="muted">(= ' + pd.cantidadUnidadesBase + ' u.)</span>' : '') +
+      '</span>' +
+      (pd.precioTotal ? '<span class="pedidoCard__precio">$ ' + num(pd.precioTotal) + '</span>' : '') +
+    '</div>' +
+    '<div class="pedidoCard__fechas">' +
+      '<span>Necesita: <strong style="color:' + (esUrgente ? '#EF4444' : '#00D4FF') + '">' + fmtDateShort(pd.fechaNecesaria) + (esUrgente ? ' ⚠ VENCIDA' : '') + '</strong></span>' +
+      '<span>Pedido: ' + fmtDateShort(pd.fechaReserva) + '</span>' +
+      (pd.fechaEntrega ? '<span>Entrega: ' + fmtDateShort(pd.fechaEntrega) + '</span>' : '') +
+      (pd.pagado ? '<span style="color:#22C55E">✓ Pagado ' + (pd.fechaPago ? fmtDateShort(pd.fechaPago) : '') + '</span>' : '<span style="color:#F59E0B">○ Pendiente de pago</span>') +
+    '</div>' +
+    (esReservado || esEntregado ? '<div class="pedidoCard__actions">' +
+      (esReservado ? '<button class="btn btn--sm btn--primary" data-entregar="' + pd.id + '">Marcar entregado</button>' : '') +
+      (esReservado ? '<button class="btn btn--sm btn--ghost" data-cancelar="' + pd.id + '">Cancelar</button>' : '') +
+      (!pd.pagado ? '<button class="btn btn--sm btn--secondary" data-pagado="' + pd.id + '">Marcar pagado</button>' : '<button class="btn btn--sm btn--ghost" data-pagado="' + pd.id + '">Desmarcar pago</button>') +
+      (pd.estado === 'CANCELADO' || esEntregado ? '<button class="btn btn--sm btn--ghost" data-eliminarpd="' + pd.id + '" style="color:#EF4444">Eliminar</button>' : '') +
+    '</div>' : (pd.estado === 'CANCELADO' ? '<div class="pedidoCard__actions"><button class="btn btn--sm btn--ghost" data-eliminarpd="' + pd.id + '" style="color:#EF4444">Eliminar</button></div>' : '')) +
+  '</div>';
+}
+
+/* ---------- Render: Reportes ---------- */
+function renderReportes() {
+  const el = document.getElementById('view-reportes');
+  const hoy = todayStr();
+  if (!state.reportRange.desde) state.reportRange = { desde: addDays(hoy, -6), hasta: hoy };
+  const lista = filtrarRango(state.reportRange.desde, state.reportRange.hasta);
+  const agg = agregados(lista);
+  const rotosPct = agg.total ? (agg.rotos / agg.total) * 100 : 0;
+  const p = PERMS[state.perfil.rol] || PERMS.Operario;
+
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Período del reporte</h3></div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>Desde</span><input type="date" id="rep_desde" value="' + state.reportRange.desde + '"></label>' +
+        '<label class="field"><span>Hasta</span><input type="date" id="rep_hasta" value="' + state.reportRange.hasta + '"></label>' +
+      '</div>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Resumen del período</h3></div>' +
+      (agg.total ? (
+        '<div class="tableWrap"><table class="table">' +
+          '<tbody>' +
+          '<tr><td>Total recolectado</td><td><strong>' + num(agg.total) + '</strong></td></tr>' +
+          SIZE_KEYS.map(k => '<tr><td>' + SIZE_LABELS[k] + '</td><td>' + num(agg[k]) + '</td></tr>').join('') +
+          '<tr><td>Rotos</td><td>' + num(agg.rotos) + ' (' + pct(rotosPct) + ')</td></tr>' +
+          '<tr><td>Sucios / descartados</td><td>' + num(agg.sucios) + '</td></tr>' +
+          '<tr><td>Días con registro</td><td>' + diasConDatos(lista) + '</td></tr>' +
+          (function() { const pp = picoPostura(agg.total); return pp !== null ? '<tr><td>Pico de postura (período)</td><td><strong>' + pct(pp) + '</strong> huevos/gallinas</td></tr>' : ''; })() +
+          '</tbody></table></div>'
+      ) : emptyState('No hay registros en este período.', null)) +
+    '</section>' +
+    '<section class="panel panel--actions">' +
+      '<button class="btn btn--primary" id="btnPdf" ' + (agg.total ? '' : 'disabled') + '>Descargar PDF</button>' +
+      '<button class="btn btn--secondary" id="btnExcel" ' + (agg.total ? '' : 'disabled') + '>Descargar Excel</button>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Historial detallado del período</h3></div>' +
+      (lista.length ? '<div id="listaReportes"></div>' : emptyState('Sin datos en este período.', null)) +
+    '</section>';
+
+  const onRangeChange = () => {
+    const d = document.getElementById('rep_desde').value;
+    const h = document.getElementById('rep_hasta').value;
+    if (d && h && d <= h) { state.reportRange = { desde: d, hasta: h }; renderReportes(); }
+  };
+  document.getElementById('rep_desde').addEventListener('change', onRangeChange);
+  document.getElementById('rep_hasta').addEventListener('change', onRangeChange);
+
+  const btnPdf = document.getElementById('btnPdf');
+  const btnExcel = document.getElementById('btnExcel');
+  if (btnPdf) btnPdf.addEventListener('click', () => exportarPDF(state.reportRange.desde, state.reportRange.hasta));
+  if (btnExcel) btnExcel.addEventListener('click', () => exportarExcel(state.reportRange.desde, state.reportRange.hasta));
+
+  const contList = document.getElementById('listaReportes');
+  if (contList && lista.length) {
+    const listaOrdenada = lista.slice().sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora));
+    contList.innerHTML = listaOrdenada.map(r => {
+      const g = state.galpones.find(g => g.id === r.galponId);
+      const esPropio = r.usuario === (state.perfil.nombre || state.perfil.rol);
+      const puedeEditar = p.editarCualquiera || esPropio;
+      const puedeBorrar = p.borrarCualquiera || esPropio;
+      return '<div class="regRow">' +
+        '<div class="regRow__main">' +
+          '<div class="regRow__top"><strong>' + fmtDateShort(r.fecha) + ' ' + r.hora + '</strong> · ' + (g ? g.nombre : 'Sin galpón') + '</div>' +
+          '<div class="regRow__sub">' + totalRegistro(r) + ' huevos · ' + r.rotos + ' rotos · ' + r.sucios + ' sucios</div>' +
+          (r.observaciones ? '<div class="regRow__obs">' + escapeHtml(r.observaciones) + '</div>' : '') +
+        '</div>' +
+        '<div class="regRow__actions">' +
+          (puedeEditar ? '<button class="iconBtn iconBtn--edit" data-editr="' + r.id + '" aria-label="Editar">' + ICONS.pencil + '</button>' : '') +
+          (puedeBorrar ? '<button class="iconBtn iconBtn--danger" data-del="' + r.id + '" aria-label="Eliminar">' + ICONS.trash + '</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    contList.querySelectorAll('[data-editr]').forEach(btn => btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-editr');
+      abrirEditarRegistroModal(id);
+    }));
+    contList.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-del');
+      await eliminarRegistroPorId(id);
+      toast('Registro eliminado');
+    }));
+  }
+}
+
+/* ---------- Gráficos con Chart.js ---------- */
+function destroyChart(id) {
+  if (state.charts[id]) { state.charts[id].destroy(); delete state.charts[id]; }
+}
+function baseFont() {
+  return { family: "'Inter', sans-serif", size: 12 };
+}
+function drawBarPorTamano(canvasId, agg) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: SIZE_KEYS.map(k => SIZE_LABELS[k]),
+      datasets: [{ data: SIZE_KEYS.map(k => agg[k]), backgroundColor: SIZE_KEYS.map(k => SIZE_COLORS[k]), borderRadius: 8, maxBarThickness: 46 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
+}
+function drawTorta(canvasId, agg) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: SIZE_KEYS.map(k => SIZE_LABELS[k]),
+      datasets: [{ data: SIZE_KEYS.map(k => agg[k]), backgroundColor: SIZE_KEYS.map(k => SIZE_COLORS[k]), borderWidth: 2, borderColor: '#0F172A' }]
+    },
+    options: { responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { position: 'bottom', labels: { font: baseFont(), boxWidth: 12, padding: 14, color: '#94A3B8' } } } }
+  });
+}
+function drawEvolucionDiaria(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  const hoy = todayStr();
+  const labels = [], data = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = addDays(hoy, -i);
+    labels.push(fmtDateShort(d));
+    data.push(agregados(filtrarRango(d, d)).total);
+  }
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [{ data, borderColor: '#0099CC', backgroundColor: 'rgba(0,153,204,0.14)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2.5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: baseFont(), maxTicksLimit: 8, color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
+}
+function drawComparacionSemanal(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  const hoy = todayStr();
+  const labels = [], data = [];
+  let cursor = startOfWeek(hoy);
+  const semanas = [];
+  for (let i = 0; i < 6; i++) { semanas.unshift(cursor); cursor = addDays(cursor, -7); }
+  semanas.forEach(ini => {
+    const fin = addDays(ini, 6);
+    labels.push(fmtDateShort(ini) + '–' + fmtDateShort(fin));
+    data.push(agregados(filtrarRango(ini, fin > hoy ? hoy : fin)).total);
+  });
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: '#00D4FF', borderRadius: 8, maxBarThickness: 40 }] },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
+}
+function drawComparacionMensual(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  const hoy = todayStr();
+  const meses = [];
+  let cursor = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+    meses.push(d.getFullYear() + '-' + pad2(d.getMonth() + 1));
+  }
+  const labels = meses.map(fmtMonthLabel);
+  const data = meses.map(mk => agregados(state.registros.filter(r => monthKey(r.fecha) === mk)).total);
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: '#00D4FF', borderRadius: 8, maxBarThickness: 40 }] },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
+}
+const GALPON_COLORS = ['#0D1B2A', '#00D4FF', '#0EA5E9', '#0099CC', '#0284C7', '#FF4D6A', '#38BDF8', '#0A1628'];
+function drawComparacionGalpones(canvasId, filas) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: filas.map(f => f.g.nombre),
+      datasets: [{ data: filas.map(f => f.mesG), backgroundColor: filas.map((f, i) => GALPON_COLORS[i % GALPON_COLORS.length]), borderRadius: 8, maxBarThickness: 46 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
+}
+
+/* ---------- Gráficos temporales para el PDF ---------- */
+function chartImageOffscreen(type, config, w, h) {
+  if (typeof Chart === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const chart = new Chart(canvas.getContext('2d'), Object.assign({ type }, config));
+  const img = chart.toBase64Image('image/png', 1);
+  chart.destroy();
+  return img;
+}
+
+/* ---------- Exportar PDF ---------- */
+async function exportarPDF(desde, hasta) {
+  try {
+  const lista = filtrarRango(desde, hasta);
+  const agg = agregados(lista);
+  const rotosPct = agg.total ? (agg.rotos / agg.total) * 100 : 0;
+  if (!window.jspdf || !window.jspdf.jsPDF) { toast('Error: librería PDF no disponible. Verificá la conexión a internet.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const marginX = 42;
+
+  /* Header oscuro con neon */
+  doc.setFillColor(13, 27, 42);
+  doc.rect(0, 0, pageW, 86, 'F');
+  doc.setTextColor(0, 212, 255);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20);
+  doc.text('Granja Ercilia', marginX, 40);
+  doc.setTextColor(226, 232, 240);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+  doc.text('Reporte de producci\u00f3n de huevos', marginX, 60);
+  doc.text('Per\u00edodo: ' + fmtDateLong(desde) + '  al  ' + fmtDateLong(hasta), marginX, 76);
+
+  let y = 116;
+  doc.setTextColor(226, 232, 240);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  doc.text('Resumen', marginX, y);
+  y += 10;
+
+  const resumenBody = [
+    ['Total recolectado', num(agg.total)],
+    ['Peque\u00f1os', num(agg.pequenos)],
+    ['Medianos', num(agg.medianos)],
+    ['Grandes', num(agg.grandes)],
+    ['Extra grandes', num(agg.extraGrandes)],
+    ['Rotos', num(agg.rotos) + ' (' + pct(rotosPct) + ')'],
+    ['Sucios / descartados', num(agg.sucios)],
+    ['D\u00edas con registro', String(diasConDatos(lista))]
+  ];
+  const ppPdf = picoPostura(agg.total);
+  if (ppPdf !== null) resumenBody.push(['Pico de postura', pct(ppPdf) + ' huevos/gallinas']);
+  doc.autoTable({
+    startY: y, margin: { left: marginX, right: marginX },
+    head: [['Indicador', 'Valor']], body: resumenBody,
+    theme: 'plain', styles: { font: 'helvetica', fontSize: 10, textColor: [226, 232, 240], cellPadding: 5 },
+    headStyles: { fillColor: [13, 27, 42], textColor: [0, 212, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [20, 30, 50] },
+    bodyStyles: { fillColor: [17, 24, 39] }
+  });
+
+  y = doc.lastAutoTable.finalY + 24;
+  if (agg.total) {
+    let barImg = null, pieImg = null;
+    try {
+      barImg = chartImageOffscreen('bar', {
+        data: { labels: SIZE_KEYS.map(k => SIZE_LABELS[k]), datasets: [{ data: SIZE_KEYS.map(k => agg[k]), backgroundColor: SIZE_KEYS.map(k => SIZE_COLORS[k]), borderColor: SIZE_KEYS.map(k => SIZE_COLORS[k]), borderWidth: 1 }] },
+        options: { responsive: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } } }
+      }, 560, 320);
+      pieImg = chartImageOffscreen('doughnut', {
+        data: { labels: SIZE_KEYS.map(k => SIZE_LABELS[k]), datasets: [{ data: SIZE_KEYS.map(k => agg[k]), backgroundColor: SIZE_KEYS.map(k => SIZE_COLORS[k]), borderColor: '#0D1B2A', borderWidth: 2 }] },
+        options: { responsive: false, animation: false, plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8' } } } }
+      }, 560, 380);
+    } catch(e) { console.warn('Error generando gr\u00e1ficos PDF:', e); }
+
+    if (y > 620) { doc.addPage(); y = 40; }
+    doc.setTextColor(226, 232, 240);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('Clasificaci\u00f3n por tama\u00f1o', marginX, y);
+    y += 10;
+    if (barImg && pieImg) {
+      const imgW = (pageW - marginX * 2 - 16) / 2;
+      doc.addImage(barImg, 'PNG', marginX, y, imgW, imgW * (320 / 560));
+      doc.addImage(pieImg, 'PNG', marginX + imgW + 16, y, imgW, imgW * (380 / 560));
+      y += imgW * (320 / 560) + 26;
+    }
+  }
+
+  const porDia = {};
+  lista.forEach(r => {
+    porDia[r.fecha] = porDia[r.fecha] || { total: 0, rotos: 0, sucios: 0 };
+    porDia[r.fecha].total += totalRegistro(r);
+    porDia[r.fecha].rotos += Number(r.rotos) || 0;
+    porDia[r.fecha].sucios += Number(r.sucios) || 0;
+  });
+  const diasOrdenados = Object.keys(porDia).sort();
+  if (diasOrdenados.length) {
+    if (y > 680) { doc.addPage(); y = 40; }
+    doc.setTextColor(226, 232, 240);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('Detalle por d\u00eda', marginX, y);
+    y += 8;
+    doc.autoTable({
+      startY: y, margin: { left: marginX, right: marginX },
+      head: [['Fecha', 'Total', 'Rotos', 'Sucios']],
+      body: diasOrdenados.map(d => [fmtDateShort(d), num(porDia[d].total), num(porDia[d].rotos), num(porDia[d].sucios)]),
+      theme: 'striped', styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 5, textColor: [226, 232, 240] },
+      headStyles: { fillColor: [14, 165, 233], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [20, 30, 50] },
+      bodyStyles: { fillColor: [17, 24, 39] }
+    });
+  }
+
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8.5); doc.setTextColor(148, 163, 184);
+    doc.text('Generado el ' + fmtDateLong(todayStr()) + ' \u00b7 Granja Ercilia', marginX, doc.internal.pageSize.getHeight() - 20);
+  }
+
+  doc.save('granja-ercilia-reporte_' + desde + '_a_' + hasta + '.pdf');
+  toast('PDF generado \u2713');
+  } catch(e) { console.error('Error exportarPDF:', e); toast('Error al generar PDF: ' + e.message); }
+}
+
+/* ---------- Exportar Excel ---------- */
+function exportarExcel(desde, hasta) {
+  const lista = filtrarRango(desde, hasta).sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const agg = agregados(lista);
+  const rotosPct = agg.total ? (agg.rotos / agg.total) * 100 : 0;
+
+  const filasRegistros = lista.map(r => {
+    const g = state.galpones.find(g => g.id === r.galponId);
+    return {
+      Fecha: r.fecha, Hora: r.hora, Galpón: g ? g.nombre : '', Pequeños: r.pequenos, Medianos: r.medianos,
+      Grandes: r.grandes, 'Extra grandes': r.extraGrandes, Rotos: r.rotos, 'Sucios/Descartados': r.sucios,
+      Total: totalRegistro(r), Usuario: r.usuario, Observaciones: r.observaciones
+    };
+  });
+  const resumen = [
+    { Indicador: 'Período', Valor: desde + ' a ' + hasta },
+    { Indicador: 'Total recolectado', Valor: agg.total },
+    { Indicador: 'Pequeños', Valor: agg.pequenos },
+    { Indicador: 'Medianos', Valor: agg.medianos },
+    { Indicador: 'Grandes', Valor: agg.grandes },
+    { Indicador: 'Extra grandes', Valor: agg.extraGrandes },
+    { Indicador: 'Rotos', Valor: agg.rotos },
+    { Indicador: '% Rotos', Valor: Number(rotosPct.toFixed(2)) },
+    { Indicador: 'Sucios/Descartados', Valor: agg.sucios },
+    { Indicador: 'Días con registro', Valor: diasConDatos(lista) }
+  ];
+  const ppExcel = picoPostura(agg.total);
+  if (ppExcel !== null) resumen.push({ Indicador: 'Pico de postura (%)', Valor: Number(ppExcel.toFixed(2)) });
+
+  const wb = XLSX.utils.book_new();
+  const wsResumen = XLSX.utils.json_to_sheet(resumen);
+  const wsRegistros = XLSX.utils.json_to_sheet(filasRegistros);
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+  XLSX.utils.book_append_sheet(wb, wsRegistros, 'Registros');
+  XLSX.writeFile(wb, 'granja-ercilia-reporte_' + desde + '_a_' + hasta + '.xlsx');
+  toast('Excel generado ✓');
+}
+
+/* ---------- Perfil (rol) / respaldo ---------- */
+let mostrarFormNube = false;
+function renderPerfilModal() {
+  const modal = document.getElementById('modalPerfil');
+  const conectado = !!db;
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>Perfil y ajustes</h3><button class="iconBtn" id="cerrarPerfil">' + ICONS.x + '</button></div>' +
+      '<label class="field"><span>Nombre (opcional)</span><input type="text" id="p_nombre" value="' + escapeHtml(state.perfil.nombre) + '" placeholder="Tu nombre"></label>' +
+      '<label class="field"><span>Rol</span><select id="p_rol">' +
+        ['Administrador', 'Supervisor', 'Operario'].map(r => '<option value="' + r + '"' + (state.perfil.rol === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+      '</select></label>' +
+      '<p class="modalNote">El rol define qué secciones podés usar. Administrador: todo. Supervisor: ver e informar. Operario: registrar producción.</p>' +
+      '<button class="btn btn--primary" id="guardarPerfil">Guardar</button>' +
+      '<div class="divider"></div>' +
+      '<h4 class="modalSubhead">Sincronización en tiempo real</h4>' +
+      (conectado ?
+        '<div class="alertCard alertCard--ok2">' + ICONS.check + '<span>Conectado a la nube. Todo el equipo ve los mismos datos al instante, desde su propio celular.</span></div>' +
+        '<button class="btn btn--ghost" id="btnDesconectarNube">Desconectar de la nube</button>'
+      :
+        '<p class="modalNote">Ahora mismo esta app guarda los datos ' + (window.storage ? 'dentro de este chat de Claude' : 'solo en este dispositivo') + '. Para que todo el equipo cargue desde su propio celular y vea lo mismo en tiempo real, conectá una base de datos gratuita (Firebase). Tardás unos 5 minutos.</p>' +
+        (mostrarFormNube ?
+          '<ol class="modalSteps">' +
+            '<li>Entrá a <strong>console.firebase.google.com</strong> con una cuenta de Google.</li>' +
+            '<li>Creá un proyecto (podés llamarlo "granja-ercilia"), sin habilitar Google Analytics.</li>' +
+            '<li>En el menú izquierdo entrá a <strong>Compilación → Firestore Database</strong> y creá una base de datos, en <strong>modo de prueba</strong>.</li>' +
+            '<li>Andá a <strong>Configuración del proyecto</strong> (ícono ⚙ arriba a la izquierda) → sección "Tus apps" → creá una app <strong>Web</strong> (ícono &lt;/&gt;), con cualquier nombre.</li>' +
+            '<li>Copiá el objeto <code>firebaseConfig</code> que te muestra y pegalo acá abajo, tal cual.</li>' +
+          '</ol>' +
+          '<label class="field"><span>Configuración de Firebase (pegar el objeto firebaseConfig)</span><textarea id="p_cloudcfg" rows="6" placeholder=\'{ apiKey: "...", authDomain: "...", projectId: "...", ... }\'></textarea></label>' +
+          '<button class="btn btn--secondary" id="btnConectarNube">Conectar</button>'
+        : '<button class="btn btn--ghost" id="btnMostrarNube">Configurar sincronización en la nube</button>')
+      ) +
+      '<div class="divider"></div>' +
+      '<h4 class="modalSubhead">Respaldo de datos</h4>' +
+      '<p class="modalNote">Además de lo anterior, podés exportar en cualquier momento una copia manual de todos los registros.</p>' +
+      '<div class="modalRow"><button class="btn btn--ghost" id="btnExportarRespaldo">Descargar copia (.json)</button>' +
+      '<label class="btn btn--ghost" id="btnImportarRespaldo">Restaurar copia<input type="file" id="fileRespaldo" accept="application/json" hidden></label></div>' +
+    '</div>';
+
+  const btnMostrarNube = document.getElementById('btnMostrarNube');
+  if (btnMostrarNube) btnMostrarNube.addEventListener('click', () => { mostrarFormNube = true; renderPerfilModal(); });
+  const btnConectarNube = document.getElementById('btnConectarNube');
+  if (btnConectarNube) btnConectarNube.addEventListener('click', async () => {
+    const texto = document.getElementById('p_cloudcfg').value;
+    const cfg = parseFirebaseConfigInput(texto);
+    if (!cfg || !cfg.apiKey || !cfg.projectId) { toast('No pude leer esa configuración. Revisá que sea el objeto completo copiado de Firebase.'); return; }
+    btnConectarNube.textContent = 'Conectando...'; btnConectarNube.disabled = true;
+    try {
+      await initCloud(cfg);
+      saveCloudConfig(cfg);
+      toast('¡Conectado! Sincronizando datos del equipo...');
+      setTimeout(() => location.reload(), 600);
+    } catch (e) {
+      toast('No se pudo conectar. Revisá el modo de prueba de Firestore y que el texto esté completo.');
+      btnConectarNube.textContent = 'Conectar'; btnConectarNube.disabled = false;
+    }
+  });
+  const btnDesconectarNube = document.getElementById('btnDesconectarNube');
+  if (btnDesconectarNube) btnDesconectarNube.addEventListener('click', () => {
+    if (!confirm('Esto desconecta este dispositivo de la nube y vuelve al modo local. ¿Continuar?')) return;
+    clearCloudConfig();
+    location.reload();
+  });
+
+  document.getElementById('cerrarPerfil').addEventListener('click', cerrarPerfil);
+  document.getElementById('guardarPerfil').addEventListener('click', async () => {
+    state.perfil.nombre = document.getElementById('p_nombre').value.trim();
+    state.perfil.rol = document.getElementById('p_rol').value;
+    await storeSet('perfil', JSON.stringify(state.perfil), false);
+    renderNav();
+    if (!canAccess(state.activeTab)) setTab('inicio'); else renderCurrentView();
+    toast('Perfil actualizado');
+    cerrarPerfil();
+  });
+  document.getElementById('btnExportarRespaldo').addEventListener('click', () => {
+    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, exportadoEn: new Date().toISOString() }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'granja-ercilia-respaldo_' + todayStr() + '.json';
+    a.click();
+  });
+  document.getElementById('fileRespaldo').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (Array.isArray(data.registros) && Array.isArray(data.galpones)) {
+        await restaurarDatos(data.registros, data.galpones, data.pedidos || []);
+        toast('Respaldo restaurado ✓');
+        cerrarPerfil();
+        renderCurrentView();
+      } else {
+        toast('El archivo no parece un respaldo válido.');
+      }
+    } catch (err) { toast('Error al leer el respaldo'); }
+  });
+}
+
+function abrirPerfil() {
+  renderPerfilModal();
+  document.getElementById('modalPerfil').classList.add('modal--open');
+}
+function cerrarPerfil() {
+  document.getElementById('modalPerfil').classList.remove('modal--open');
+}
+
+/* ---------- Cargar datos iniciales ---------- */
+async function cargarDatos() {
+  const cfg = loadCloudConfig();
+  if (cfg) {
+    try {
+      await initCloud(cfg);
+      setupListeners();
+    } catch (e) {
+      console.warn('Error al iniciar Firebase con config guardada, volviendo a local:', e);
+      clearCloudConfig();
+      await cargarDatosLocales();
+    }
+  } else {
+    await cargarDatosLocales();
+  }
+
+  const p = await storeGet('perfil', false);
+  if (p) { try { state.perfil = Object.assign(state.perfil, JSON.parse(p)); } catch (e) {} }
+
+  renderNav();
+  setTab('inicio');
+}
+
+async function cargarDatosLocales() {
+  const r = await storeGet('registros', true);
+  if (r) { try { state.registros = JSON.parse(r); } catch (e) {} }
+  const g = await storeGet('galpones', true);
+  if (g) { try { state.galpones = JSON.parse(g); } catch (e) {} }
+  const pd = await storeGet('pedidos', true);
+  if (pd) { try { state.pedidos = JSON.parse(pd); } catch (e) {} }
+  if (!state.galpones.length) {
+    state.galpones = [{ id: 'g_default', nombre: 'Galpón 1', capacidad: 0 }];
+    await guardarGalponesLocal();
+  }
+}
+
+/* Global error handler — muestra errores como toast para depuración */
+window.onerror = function(msg, src, line, col, err) {
+  console.error('Global error:', msg, src, line, col, err);
+  try { toast('⚠ Error L' + line + ': ' + msg); } catch(e) {}
+};
+window.addEventListener('unhandledrejection', function(ev) {
+  console.error('Unhandled promise:', ev.reason);
+  try { toast('⚠ Async error: ' + (ev.reason && ev.reason.message || ev.reason)); } catch(e) {}
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btnPerfil').addEventListener('click', abrirPerfil);
+  cargarDatos().catch(e => {
+    console.error('Error al cargar datos:', e);
+    try { toast('Error al cargar datos: ' + e.message); } catch(e2) {}
+    try { renderNav(); setTab('inicio'); } catch(e2) { console.error('Fallback render failed:', e2); }
+  });
+});
+</script>
+</body>
+</html>
