@@ -975,8 +975,8 @@ function renderInicio() {
     ).join('') + '</section>' : '') +
 
     '<section class="statGrid">' +
-      statCard('Semana', num(aggSemana.total), 'huevos', 'ok') +
-      statCard('Mes', num(aggMes.total), 'huevos', 'ok') +
+      statCard('Semana', num(Math.floor(aggSemana.total / 30)) + (aggSemana.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggSemana.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
+      statCard('Mes', num(Math.floor(aggMes.total / 30)) + (aggMes.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggMes.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
       statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
       statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
       (function() { const pp = picoPostura(aggHoy.total); return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
