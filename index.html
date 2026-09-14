@@ -449,10 +449,13 @@ async function guardarGalponesLocal() {
 async function guardarPedidosLocal() {
   await storeSet('pedidos', JSON.stringify(state.pedidos), true);
 }
+async function guardarStockLocal() {
+  await storeSet('stock', JSON.stringify(state.stock), true);
+}
 
 /* ---------- Sincronización en la nube (Firebase Firestore) ---------- */
 let fbApp = null, db = null, cloudConfig = null;
-let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null;
+let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null, unsubStock = null;
 
 function loadCloudConfig() {
   try {
@@ -484,6 +487,7 @@ function setupListeners() {
   if (unsubRegistros) unsubRegistros();
   if (unsubGalpones) unsubGalpones();
   if (unsubPedidos) unsubPedidos();
+  if (unsubStock) unsubStock();
   unsubRegistros = db.collection('registros').onSnapshot(snap => {
     state.registros = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
@@ -501,6 +505,10 @@ function setupListeners() {
     state.pedidos = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
   }, err => { toast('Error de sincronización pedidos: ' + err.message); });
+  unsubStock = db.collection('stock').onSnapshot(snap => {
+    state.stock = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización stock: ' + err.message); });
 }
 
 function onDataChanged() {
@@ -593,6 +601,47 @@ async function actualizarPedido(id, datos) {
     renderCurrentView();
   }
 }
+/* ---------- Operaciones de stock (nube / local) ---------- */
+async function guardarStock(stk) {
+  if (db) {
+    const data = Object.assign({}, stk); const id = data.id; delete data.id;
+    await db.collection('stock').doc(id).set(data);
+  } else {
+    const idx = state.stock.findIndex(s => s.id === stk.id);
+    if (idx !== -1) state.stock[idx] = stk; else state.stock.push(stk);
+    await guardarStockLocal();
+    renderCurrentView();
+  }
+}
+async function eliminarStockPorId(id) {
+  if (db) {
+    await db.collection('stock').doc(id).delete();
+  } else {
+    state.stock = state.stock.filter(s => s.id !== id);
+    await guardarStockLocal();
+    renderCurrentView();
+  }
+}
+
+/* ---------- Cálculo de stock disponible ---------- */
+function stockParaFecha(fecha) {
+  const stk = state.stock.find(s => s.fecha === fecha);
+  return stk ? (Number(stk.maples) || 0) : 0;
+}
+function comprometidoParaFecha(fecha) {
+  return state.pedidos
+    .filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha)
+    .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
+}
+function comprometidoParaFechaTurno(fecha, turno) {
+  return state.pedidos
+    .filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha && pd.turno === turno)
+    .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
+}
+function disponibleParaFecha(fecha) {
+  return Math.max(0, stockParaFecha(fecha) - comprometidoParaFecha(fecha));
+}
+
 async function eliminarPedidoPorId(id) {
   if (db) {
     await db.collection('pedidos').doc(id).delete();
@@ -602,9 +651,9 @@ async function eliminarPedidoPorId(id) {
     renderCurrentView();
   }
 }
-async function restaurarDatos(registros, galpones, pedidos) {
+async function restaurarDatos(registros, galpones, pedidos, stockItems) {
   if (db) {
-    const colecciones = ['registros', 'galpones', 'pedidos'];
+    const colecciones = ['registros', 'galpones', 'pedidos', 'stock'];
     for (const nombre of colecciones) {
       const snap = await db.collection(nombre).get();
       let batch = db.batch(); let count = 0;
@@ -630,14 +679,22 @@ async function restaurarDatos(registros, galpones, pedidos) {
       batch.set(db.collection('pedidos').doc(id), data); count++;
       if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
     }
+    const stockData = stockItems || [];
+    for (const s of stockData) {
+      const data = Object.assign({}, s); const id = data.id; delete data.id;
+      batch.set(db.collection('stock').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
     if (count) await batch.commit();
   } else {
     state.registros = registros;
     state.galpones = galpones;
     state.pedidos = pedidos || [];
+    state.stock = stockItems || [];
     await guardarRegistrosLocal();
     await guardarGalponesLocal();
     await guardarPedidosLocal();
+    await guardarStockLocal();
   }
 }
 
@@ -646,6 +703,7 @@ const state = {
   registros: [],
   galpones: [],
   pedidos: [],
+  stock: [],
   perfil: { rol: 'Administrador', nombre: '' },
   activeTab: 'inicio',
   charts: {},
@@ -653,9 +711,9 @@ const state = {
 };
 
 const PERMS = {
-  Administrador: { registrar: true, lotes: true, pedidos: true, reportes: true, borrarCualquiera: true, editarCualquiera: true },
-  Supervisor: { registrar: false, lotes: false, pedidos: true, reportes: true, borrarCualquiera: false, editarCualquiera: false },
-  Operario: { registrar: true, lotes: false, pedidos: false, reportes: false, borrarCualquiera: false, editarCualquiera: false }
+  Administrador: { registrar: true, lotes: true, pedidos: true, reportes: true, stock: true, borrarCualquiera: true, editarCualquiera: true },
+  Supervisor: { registrar: false, lotes: false, pedidos: true, reportes: true, stock: true, borrarCualquiera: false, editarCualquiera: false },
+  Operario: { registrar: true, lotes: false, pedidos: false, reportes: false, stock: false, borrarCualquiera: false, editarCualquiera: false }
 };
 
 const SIZE_KEYS = ['pequenos', 'medianos', 'grandes', 'extraGrandes'];
@@ -663,6 +721,12 @@ const SIZE_LABELS = { pequenos: 'Pequeños', medianos: 'Medianos', grandes: 'Gra
 const SIZE_COLORS = { pequenos: '#E8B98A', medianos: '#C8956A', grandes: '#A67B52', extraGrandes: '#A78BFA' };
 
 /* ---------- Productos y Presentaciones (Pedidos) ---------- */
+const TURNOS = [
+  { id: 'MANANA', label: 'Mañana' },
+  { id: 'TARDE', label: 'Tarde' }
+];
+const TURNO_LABEL = { MANANA: 'Mañana', TARDE: 'Tarde' };
+
 const PRODUCTOS = ['HUEVOS', 'MIEL'];
 const PRESENTACIONES = {
   HUEVOS: [
@@ -1378,7 +1442,65 @@ function _renderPedidosInner(el) {
   const totalEntregadoEgg = entregados.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
   const totalEntregadoMiel = entregados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
 
+  /* --- Stock disponible hoy --- */
+  const stockHoy = stockParaFecha(hoy);
+  const comprometidoHoy = comprometidoParaFecha(hoy);
+  const disponibleHoy = Math.max(0, stockHoy - comprometidoHoy);
+  const stockManana = stockParaFecha(addDays(hoy, 1));
+  const comprometidoManana = comprometidoParaFecha(addDays(hoy, 1));
+  const disponibleManana = Math.max(0, stockManana - comprometidoManana);
+
+  /* --- Fechas con stock --- */
+  const fechasStock = {};
+  state.stock.forEach(s => { fechasStock[s.fecha] = true; });
+  const fechasStr = Object.keys(fechasStock).sort();
+  const stockRows = fechasStr.map(f => {
+    const stk = stockParaFecha(f);
+    const comp = comprometidoParaFecha(f);
+    const disp = Math.max(0, stk - comp);
+    const compMan = comprometidoParaFechaTurno(f, 'MANANA');
+    const compTar = comprometidoParaFechaTurno(f, 'TARDE');
+    const dispMan = Math.max(0, stk - compMan);
+    const dispTar = Math.max(0, stk - compTar);
+    const esHoy = f === hoy;
+    return '<tr' + (esHoy ? ' style="background:rgba(200,149,106,0.08);font-weight:600"' : '') + '>' +
+      '<td>' + fmtDateShort(f) + (esHoy ? ' (hoy)' : '') + '</td>' +
+      '<td>' + num(stk) + '</td>' +
+      '<td>' + num(compMan) + '</td>' +
+      '<td>' + num(dispMan) + '</td>' +
+      '<td>' + num(compTar) + '</td>' +
+      '<td>' + num(dispTar) + '</td>' +
+      '<td' + (disp <= 0 ? ' style="color:#22C55E;font-weight:700"' : disp < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : '') + '>' + num(disp) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const puedeStock = PERMS[state.perfil.rol] && PERMS[state.perfil.rol].stock;
+
   el.innerHTML =
+    (puedeStock ? '<section class="panel">' +
+      '<div class="panel__head"><h3>📦 Stock de huevos (maples)</h3></div>' +
+      '<form id="formStock" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha</span><input type="date" id="stk_fecha" value="' + hoy + '" required></label>' +
+          '<label class="field"><span>Maples cargados</span><input type="number" min="0" step="1" id="stk_maples" placeholder="Ej: 8" value="' + (stockHoy || '') + '" required></label>' +
+        '</div>' +
+        '<button type="submit" class="btn btn--primary">💾 Guardar stock</button>' +
+      '</form>' +
+      (fechasStr.length ? '<div style="overflow-x:auto;margin-top:12px"><table class="tbl"><thead><tr>' +
+        '<th>Fecha</th><th>Stock</th><th>Comp. Mañana</th><th>Disp. Mañana</th><th>Comp. Tarde</th><th>Disp. Tarde</th><th>Disponible</th>' +
+      '</tr></thead><tbody>' + stockRows + '</tbody></table></div>' : '') +
+    '</section>' : '') +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Disponibilidad de stock</h3></div>' +
+      '<div class="statGrid">' +
+        statCard('Stock hoy', num(stockHoy) + ' maples', 'cargado para hoy', stockHoy ? 'ok' : 'danger') +
+        statCard('Comprometido hoy', num(comprometidoHoy) + ' maples', 'reservados para hoy', comprometidoHoy ? 'warn' : 'ok') +
+        statCard('Disponible hoy', num(disponibleHoy) + ' maples', 'stock libre para hoy', disponibleHoy > 0 ? (disponibleHoy < stockHoy * 0.3 ? 'warn' : 'ok') : 'danger') +
+        statCard('Stock mañana', num(stockManana) + ' maples', 'cargado para mañana', stockManana ? 'ok' : 'danger') +
+      '</div>' +
+    '</section>' +
+
     '<section class="panel">' +
       '<div class="panel__head"><h3>Nuevo pedido / reserva</h3></div>' +
       '<form id="formPedido" class="form">' +
@@ -1390,14 +1512,13 @@ function _renderPedidosInner(el) {
           '<label class="field" id="pd_presWrap"><span>Presentación</span><select id="pd_presentacion"></select></label>' +
           '<label class="field"><span id="pd_cantidadLabel">Maples</span><input type="number" min="1" id="pd_cantidad" placeholder="Ej: 2" required value="1"></label>' +
         '</div>' +
-        '</div>' +
         '<div class="formRow2">' +
           '<label class="field"><span>Fecha necesaria</span><input type="date" id="pd_fechaNecesaria" value="' + addDays(hoy, 1) + '" required></label>' +
-          '<label class="field" id="pd_subtotalWrap"><span>Subtotal</span><input type="text" id="pd_subtotal" readonly value="$ 0" style="font-weight:700;color:var(--yolk);background:transparent;border:none;"></label>' +
+          '<label class="field"><span>Turno</span><select id="pd_turno">' + TURNOS.map(t => '<option value="' + t.id + '">' + t.label + '</option>').join('') + '</select></label>' +
         '</div>' +
         '<div class="formRow2">' +
+          '<label class="field" id="pd_subtotalWrap"><span>Subtotal</span><input type="text" id="pd_subtotal" readonly value="$ 0" style="font-weight:700;color:var(--yolk);background:transparent;border:none;"></label>' +
           '<label class="field"><span>Precio unitario ($)</span><input type="number" min="0" step="0.01" id="pd_precio" placeholder="Ej: 5000" value=""></label>' +
-          '<label class="field"><span></span></label>' +
         '</div>' +
         '<button type="submit" class="btn btn--primary">Registrar reserva</button>' +
       '</form>' +
@@ -1469,15 +1590,19 @@ function _renderPedidosInner(el) {
     const total$Pagados = entregadosF.filter(pd => pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
     const total$Pendiente = entregadosF.filter(pd => !pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
 
-    /* Pedidos por día para la tabla */
+    /* Pedidos por día y turno para la tabla */
     const porDia = {};
     lista.forEach(pd => {
       const dia = pd.fechaNecesaria || pd.fechaReserva;
-      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, huevosResMap: 0, huevosEntMap: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0 };
+      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, huevosResMap: 0, huevosEntMap: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0, turnos: {} };
       if (pd.estado === 'RESERVADO') {
         if (pd.producto === 'HUEVOS') { porDia[dia].huevosRes += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosResMap += pd.cantidadPresentacion; }
         else porDia[dia].mielRes += pd.cantidadPresentacion;
         porDia[dia].$reservado += (pd.precioTotal || 0);
+        /* por turno */
+        const t = pd.turno || 'MANANA';
+        if (!porDia[dia].turnos[t]) porDia[dia].turnos[t] = { huevosRes: 0, huevosResMap: 0 };
+        if (pd.producto === 'HUEVOS') { porDia[dia].turnos[t].huevosRes += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].turnos[t].huevosResMap += pd.cantidadPresentacion; }
       }
       if (pd.estado === 'ENTREGADO') {
         if (pd.producto === 'HUEVOS') { porDia[dia].huevosEnt += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosEntMap += pd.cantidadPresentacion; }
@@ -1505,23 +1630,36 @@ function _renderPedidosInner(el) {
       (dias.length ?
         '<div style="overflow-x:auto;margin-top:12px">' +
         '<table class="tbl"><thead><tr>' +
-          '<th>Fecha necesaria</th><th>Huevos res. (u)</th><th>Maples res.</th><th>Huevos ent. (u)</th><th>Maples ent.</th><th>Miel res.</th><th>Miel ent.</th><th>$ Reservado</th><th>$ Entregado</th>' +
+          '<th>Fecha</th><th>Turno</th><th>Stock</th><th>Comp.</th><th>Disp.</th><th>Huevos res.</th><th>Maples res.</th><th>Huevos ent.</th><th>Maples ent.</th><th>$ Res.</th><th>$ Ent.</th>' +
         '</tr></thead><tbody>' +
         dias.map(d => {
           const r = porDia[d];
           const esHoy = d === hoy;
           const rowStyle = esHoy ? 'style="background:rgba(200,149,106,0.08);font-weight:600"' : '';
-          return '<tr ' + rowStyle + '>' +
-            '<td>' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
-            '<td>' + (r.huevosRes || '-') + '</td>' +
-            '<td>' + (r.huevosResMap || '-') + '</td>' +
-            '<td>' + (r.huevosEnt || '-') + '</td>' +
-            '<td>' + (r.huevosEntMap || '-') + '</td>' +
-            '<td>' + (r.mielRes || '-') + '</td>' +
-            '<td>' + (r.mielEnt || '-') + '</td>' +
-            '<td>$ ' + num(r.$reservado) + '</td>' +
-            '<td>$ ' + num(r.$entregado) + '</td>' +
-          '</tr>';
+          const stk = stockParaFecha(d);
+          const comp = comprometidoParaFecha(d);
+          const disp = Math.max(0, stk - comp);
+          const turnoKeys = Object.keys(r.turnos || {});
+          if (turnoKeys.length === 0) turnoKeys.push('MANANA');
+          const rows = turnoKeys.map((t, ti) => {
+            const tt = r.turnos[t] || { huevosRes: 0, huevosResMap: 0 };
+            const compT = comprometidoParaFechaTurno(d, t);
+            const dispT = Math.max(0, stk - compT);
+            return '<tr ' + rowStyle + '>' +
+              (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
+                '<td rowspan="' + turnoKeys.length + '" style="text-align:center">' + num(stk) + '</td>' : '') +
+              '<td>' + TURNO_LABEL[t] + '</td>' +
+              '<td>' + num(compT) + '</td>' +
+              '<td' + (dispT <= 0 ? ' style="color:#22C55E;font-weight:700"' : dispT < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : '') + '>' + num(dispT) + '</td>' +
+              '<td>' + (tt.huevosRes || '-') + '</td>' +
+              '<td>' + (tt.huevosResMap || '-') + '</td>' +
+              (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + (r.huevosEnt || '-') + '</td>' +
+                '<td rowspan="' + turnoKeys.length + '">' + (r.huevosEntMap || '-') + '</td>' +
+                '<td rowspan="' + turnoKeys.length + '">$ ' + num(r.$reservado) + '</td>' +
+                '<td rowspan="' + turnoKeys.length + '">$ ' + num(r.$entregado) + '</td>' : '') +
+            '</tr>';
+          });
+          return rows.join('');
         }).join('') +
         '</tbody></table></div>' : '<p class="muted">Sin pedidos en el período seleccionado.</p>') +
       (lista.length ? '<div style="margin-top:14px"><strong style="color:var(--ink-soft)">Detalle (' + lista.length + ' pedidos)</strong></div>' +
@@ -1598,6 +1736,7 @@ function _renderPedidosInner(el) {
       precioTotal,
       estado: 'RESERVADO',
       pagado: false,
+      turno: document.getElementById('pd_turno') ? document.getElementById('pd_turno').value : 'MANANA',
       fechaReserva: hoy,
       fechaNecesaria: document.getElementById('pd_fechaNecesaria').value || addDays(hoy, 1),
       fechaEntrega: '',
@@ -1606,6 +1745,20 @@ function _renderPedidosInner(el) {
     await crearPedido(pedido);
     toast('Reserva registrada para ' + cliente);
   });
+
+  /* --- Stock form handler --- */
+  const formStock = document.getElementById('formStock');
+  if (formStock) {
+    formStock.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fecha = document.getElementById('stk_fecha').value;
+      const maples = Number(document.getElementById('stk_maples').value) || 0;
+      if (!fecha || maples < 0) { toast('Ingresá fecha y maples'); return; }
+      const stkId = 'stk_' + fecha;
+      await guardarStock({ id: stkId, fecha, maples, timestamp: Date.now() });
+      toast('Stock guardado: ' + maples + ' maples para ' + fmtDateShort(fecha));
+    });
+  }
 
   /* --- Botones de acción en cada card --- */
   el.querySelectorAll('[data-entregar]').forEach(btn => btn.addEventListener('click', async () => {
@@ -1675,9 +1828,10 @@ function renderEditarPedido(pedidoId) {
         '</div>' +
         '<div class="formRow2">' +
           '<label class="field"><span>Fecha necesaria</span><input type="date" id="ep_fechaNecesaria" value="' + (pd.fechaNecesaria || addDays(hoy, 1)) + '"></label>' +
-          '<label class="field"><span>Pagado</span><select id="ep_pagado"><option value="true"' + (pd.pagado ? ' selected' : '') + '>Sí</option><option value="false"' + (!pd.pagado ? ' selected' : '') + '>No</option></select></label>' +
+          '<label class="field"><span>Turno</span><select id="ep_turno">' + TURNOS.map(t => '<option value="' + t.id + '"' + (pd.turno === t.id ? ' selected' : '') + '>' + t.label + '</option>').join('') + '</select></label>' +
         '</div>' +
         '<div class="formRow2">' +
+          '<label class="field"><span>Pagado</span><select id="ep_pagado"><option value="true"' + (pd.pagado ? ' selected' : '') + '>Sí</option><option value="false"' + (!pd.pagado ? ' selected' : '') + '>No</option></select></label>' +
           '<label class="field"><span>Fecha entrega</span><input type="date" id="ep_fechaEntrega" value="' + (pd.fechaEntrega || '') + '"></label>' +
           '<label class="field"><span>Fecha pago</span><input type="date" id="ep_fechaPago" value="' + (pd.fechaPago || '') + '"></label>' +
         '</div>' +
@@ -1746,6 +1900,7 @@ function renderEditarPedido(pedidoId) {
     const precioUnit = Number(epPrecio.value) || 0;
     const nuevoEstado = document.getElementById('ep_estado').value;
     const pagado = document.getElementById('ep_pagado').value === 'true';
+    const turno = document.getElementById('ep_turno') ? document.getElementById('ep_turno').value : 'MANANA';
     const fechaNecesaria = document.getElementById('ep_fechaNecesaria').value || addDays(hoy, 1);
     const fechaEntrega = document.getElementById('ep_fechaEntrega').value || '';
     const fechaPago = document.getElementById('ep_fechaPago').value || '';
@@ -1761,6 +1916,7 @@ function renderEditarPedido(pedidoId) {
       precioTotal,
       estado: nuevoEstado,
       pagado,
+      turno,
       fechaNecesaria,
       fechaEntrega,
       fechaPago
@@ -1806,7 +1962,7 @@ function pedidoCard(pd, perms) {
       (pd.precioTotal ? '<span class="pedidoCard__precio">$ ' + num(pd.precioTotal) + '</span>' : '') +
     '</div>' +
     '<div class="pedidoCard__fechas">' +
-      '<span>Necesita: <strong style="color:' + (esUrgente ? '#EF4444' : '#C8956A') + '">' + fmtDateShort(pd.fechaNecesaria) + (esUrgente ? ' ⚠ VENCIDA' : '') + '</strong></span>' +
+      '<span>Necesita: <strong style="color:' + (esUrgente ? '#EF4444' : '#C8956A') + '">' + fmtDateShort(pd.fechaNecesaria) + (pd.turno ? ' · ' + TURNO_LABEL[pd.turno] : '') + (esUrgente ? ' ⚠ VENCIDA' : '') + '</strong></span>' +
       '<span>Pedido: ' + fmtDateShort(pd.fechaReserva) + '</span>' +
       (pd.fechaEntrega ? '<span>Entrega: ' + fmtDateShort(pd.fechaEntrega) + '</span>' : '') +
       (pd.pagado ? '<span style="color:#22C55E">✓ Pagado ' + (pd.fechaPago ? fmtDateShort(pd.fechaPago) : '') + '</span>' : '<span style="color:#F59E0B">○ Pendiente de pago</span>') +
@@ -2267,7 +2423,7 @@ function renderPerfilModal() {
     cerrarPerfil();
   });
   document.getElementById('btnExportarRespaldo').addEventListener('click', () => {
-    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, exportadoEn: new Date().toISOString() }, null, 2);
+    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, stock: state.stock, exportadoEn: new Date().toISOString() }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2281,7 +2437,7 @@ function renderPerfilModal() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (Array.isArray(data.registros) && Array.isArray(data.galpones)) {
-        await restaurarDatos(data.registros, data.galpones, data.pedidos || []);
+        await restaurarDatos(data.registros, data.galpones, data.pedidos || [], data.stock || []);
         toast('Respaldo restaurado ✓');
         cerrarPerfil();
         renderCurrentView();
@@ -2330,6 +2486,8 @@ async function cargarDatosLocales() {
   if (g) { try { state.galpones = JSON.parse(g); } catch (e) {} }
   const pd = await storeGet('pedidos', true);
   if (pd) { try { state.pedidos = JSON.parse(pd); } catch (e) {} }
+  const st = await storeGet('stock', true);
+  if (st) { try { state.stock = JSON.parse(st); } catch (e) {} }
   if (!state.galpones.length) {
     state.galpones = [{ id: 'g_default', nombre: 'Galpón 1', capacidad: 0 }];
     await guardarGalponesLocal();
