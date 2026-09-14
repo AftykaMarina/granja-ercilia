@@ -726,6 +726,11 @@ const TURNOS = [
   { id: 'TARDE', label: 'Tarde' }
 ];
 const TURNO_LABEL = { MANANA: 'Mañana', TARDE: 'Tarde' };
+const METODOS_PAGO = [
+  { id: 'EFECTIVO', label: 'Efectivo' },
+  { id: 'TRANSFERENCIA', label: 'Transferencia' }
+];
+const METODO_PAGO_LABEL = { EFECTIVO: 'Efectivo', TRANSFERENCIA: 'Transferencia' };
 
 const PRODUCTOS = ['HUEVOS', 'MIEL'];
 const PRESENTACIONES = {
@@ -1743,6 +1748,7 @@ function _renderPedidosInner(el) {
       precioTotal,
       estado: 'RESERVADO',
       pagado: false,
+      metodoPago: '',
       turno: document.getElementById('pd_turno') ? document.getElementById('pd_turno').value : 'MANANA',
       fechaReserva: hoy,
       fechaNecesaria: document.getElementById('pd_fechaNecesaria').value || addDays(hoy, 1),
@@ -1777,10 +1783,31 @@ function _renderPedidosInner(el) {
   el.querySelectorAll('[data-pagado]').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.getAttribute('data-pagado');
     const pedido = state.pedidos.find(p => p.id === id);
-    const nuevoPago = !(pedido && pedido.pagado);
-    const hoy2 = todayStr();
-    await actualizarPedido(id, { pagado: nuevoPago, fechaPago: nuevoPago ? hoy2 : '' });
-    toast(nuevoPago ? 'Marcado como pagado ✓' : 'Pago desmarcado');
+    if (pedido && pedido.pagado) {
+      /* Desmarcar pago */
+      await actualizarPedido(id, { pagado: false, fechaPago: '', metodoPago: '' });
+      toast('Pago desmarcado');
+      return;
+    }
+    /* Marcar pagado: pedir método */
+    const card = btn.closest('.pedidoCard');
+    let metDiv = card.querySelector('.metodoPagoPop');
+    if (metDiv) { metDiv.remove(); return; }
+    metDiv = document.createElement('div');
+    metDiv.className = 'metodoPagoPop';
+    metDiv.style.cssText = 'margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+    metDiv.innerHTML = '<span style="color:var(--ink-soft);font-size:0.85em">Método:</span>' +
+      METODOS_PAGO.map(m => '<button class="btn btn--sm btn--secondary" data-metodo="' + m.id + '">' + m.label + '</button>').join('') +
+      '<button class="btn btn--sm btn--ghost" data-metodo="cancel">✕</button>';
+    card.querySelector('.pedidoCard__actions').after(metDiv);
+    metDiv.querySelectorAll('[data-metodo]').forEach(mb => mb.addEventListener('click', async () => {
+      const met = mb.getAttribute('data-metodo');
+      if (met === 'cancel') { metDiv.remove(); return; }
+      const hoy2 = todayStr();
+      await actualizarPedido(id, { pagado: true, fechaPago: hoy2, metodoPago: met });
+      toast('Pagado (' + METODO_PAGO_LABEL[met] + ') ✓');
+      metDiv.remove();
+    }));
   }));
   el.querySelectorAll('[data-cancelar]').forEach(btn => btn.addEventListener('click', async () => {
     const id = btn.getAttribute('data-cancelar');
@@ -1839,6 +1866,7 @@ function renderEditarPedido(pedidoId) {
         '</div>' +
         '<div class="formRow2">' +
           '<label class="field"><span>Pagado</span><select id="ep_pagado"><option value="true"' + (pd.pagado ? ' selected' : '') + '>Sí</option><option value="false"' + (!pd.pagado ? ' selected' : '') + '>No</option></select></label>' +
+          '<label class="field"><span>Método de pago</span><select id="ep_metodoPago"><option value=""' + (!pd.metodoPago ? ' selected' : '') + '>—</option>' + METODOS_PAGO.map(m => '<option value="' + m.id + '"' + (pd.metodoPago === m.id ? ' selected' : '') + '>' + m.label + '</option>').join('') + '</select></label>' +
           '<label class="field"><span>Fecha entrega</span><input type="date" id="ep_fechaEntrega" value="' + (pd.fechaEntrega || '') + '"></label>' +
           '<label class="field"><span>Fecha pago</span><input type="date" id="ep_fechaPago" value="' + (pd.fechaPago || '') + '"></label>' +
         '</div>' +
@@ -1911,6 +1939,7 @@ function renderEditarPedido(pedidoId) {
     const fechaNecesaria = document.getElementById('ep_fechaNecesaria').value || addDays(hoy, 1);
     const fechaEntrega = document.getElementById('ep_fechaEntrega').value || '';
     const fechaPago = document.getElementById('ep_fechaPago').value || '';
+    const metodoPago = document.getElementById('ep_metodoPago') ? document.getElementById('ep_metodoPago').value : '';
     if (!cliente || cantidadPres < 1) { toast('Completá cliente y cantidad'); return; }
     const cantBase = unidadesBase(producto, presentacion, cantidadPres);
     const precioTotal = cantidadPres * precioUnit;
@@ -1926,7 +1955,8 @@ function renderEditarPedido(pedidoId) {
       turno,
       fechaNecesaria,
       fechaEntrega,
-      fechaPago
+      fechaPago,
+      metodoPago
     };
     /* Si el estado cambia a ENTREGADO y no tiene fechaEntrega, poner hoy */
     if (nuevoEstado === 'ENTREGADO' && !fechaEntrega) datos.fechaEntrega = hoy;
@@ -1972,7 +2002,7 @@ function pedidoCard(pd, perms) {
       '<span>Necesita: <strong style="color:' + (esUrgente ? '#EF4444' : '#C8956A') + '">' + fmtDateShort(pd.fechaNecesaria) + (pd.turno ? ' · ' + TURNO_LABEL[pd.turno] : '') + (esUrgente ? ' ⚠ VENCIDA' : '') + '</strong></span>' +
       '<span>Pedido: ' + fmtDateShort(pd.fechaReserva) + '</span>' +
       (pd.fechaEntrega ? '<span>Entrega: ' + fmtDateShort(pd.fechaEntrega) + '</span>' : '') +
-      (pd.pagado ? '<span style="color:#22C55E">✓ Pagado ' + (pd.fechaPago ? fmtDateShort(pd.fechaPago) : '') + '</span>' : '<span style="color:#F59E0B">○ Pendiente de pago</span>') +
+      (pd.pagado ? '<span style="color:#22C55E">✓ Pagado' + (pd.metodoPago ? ' (' + METODO_PAGO_LABEL[pd.metodoPago] + ')' : '') + ' ' + (pd.fechaPago ? fmtDateShort(pd.fechaPago) : '') + '</span>' : '<span style="color:#F59E0B">○ Pendiente de pago</span>') +
     '</div>' +
     '<div class="pedidoCard__actions">' +
       '<button class="btn btn--sm btn--secondary" data-editarpd="' + pd.id + '">✏️ Editar</button>' +
