@@ -1535,7 +1535,14 @@ function _renderPedidosInner(el) {
     '</section>' +
 
     (reservados.length ? '<section class="panel"><div class="panel__head"><h3>Pendientes de entrega</h3></div>' +
-      reservados.map(pd => pedidoCard(pd, p)).join('') +
+      reservados.sort((a, b) => {
+        const fa = a.fechaNecesaria || a.fechaReserva;
+        const fb = b.fechaNecesaria || b.fechaReserva;
+        if (fa !== fb) return fb.localeCompare(fa);
+        const tA = a.turno === 'MANANA' ? 0 : 1;
+        const tB = b.turno === 'MANANA' ? 0 : 1;
+        return tA - tB;
+      }).map(pd => pedidoCard(pd, p)).join('') +
     '</section>' : '') +
 
     (entregados.length ? '<section class="panel"><div class="panel__head"><h3>Entregados</h3></div>' +
