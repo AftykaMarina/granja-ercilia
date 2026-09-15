@@ -638,8 +638,24 @@ function comprometidoParaFechaTurno(fecha, turno) {
     .filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha && pd.turno === turno)
     .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
 }
+/* Stock efectivo: stock cargado ese día + sobrante acumulado de días anteriores.
+   El sobrante de un día = stock efectivo − comprometido total. Lo que sobra pasa al día siguiente.
+   Se calcula recursivamente con límite de 60 días hacia atrás para evitar stack overflow.
+   Turnos: Mañana (8-13) y Tarde (16-21) AMBOS descuentan del mismo pool del día.
+   Ejemplo: stock 8, comprometido Mañana 3 → disp Mañana 5. Comprometido Tarde 2 → disp Tarde 3. Sobrante 3 pasa al día siguiente. */
+function stockEfectivo(fecha, profundidad) {
+  if (profundidad === undefined) profundidad = 60;
+  if (profundidad <= 0) return stockParaFecha(fecha);
+  const stk = stockParaFecha(fecha);
+  const diaAnt = addDays(fecha, -1);
+  const stkAnt = stockEfectivo(diaAnt, profundidad - 1);
+  const compAnt = comprometidoParaFecha(diaAnt);
+  const sobranteAnt = Math.max(0, stkAnt - compAnt);
+  if (stkAnt === 0 && sobranteAnt === 0) return stk;
+  return stk + sobranteAnt;
+}
 function disponibleParaFecha(fecha) {
-  return Math.max(0, stockParaFecha(fecha) - comprometidoParaFecha(fecha));
+  return Math.max(0, stockEfectivo(fecha) - comprometidoParaFecha(fecha));
 }
 
 async function eliminarPedidoPorId(id) {
@@ -1448,34 +1464,37 @@ function _renderPedidosInner(el) {
   const totalEntregadoMiel = entregados.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
 
   /* --- Stock disponible hoy --- */
-  const stockHoy = stockParaFecha(hoy);
+  const stockEfecHoy = stockEfectivo(hoy);
   const comprometidoHoy = comprometidoParaFecha(hoy);
-  const disponibleHoy = Math.max(0, stockHoy - comprometidoHoy);
-  const stockManana = stockParaFecha(addDays(hoy, 1));
+  const disponibleHoy = Math.max(0, stockEfecHoy - comprometidoHoy);
+  const stockEfecManana = stockEfectivo(addDays(hoy, 1));
   const comprometidoManana = comprometidoParaFecha(addDays(hoy, 1));
-  const disponibleManana = Math.max(0, stockManana - comprometidoManana);
+  const disponibleManana = Math.max(0, stockEfecManana - comprometidoManana);
 
   /* --- Fechas con stock --- */
   const fechasStock = {};
   state.stock.forEach(s => { fechasStock[s.fecha] = true; });
   const fechasStr = Object.keys(fechasStock).sort();
   const stockRows = fechasStr.map(f => {
-    const stk = stockParaFecha(f);
+    const stkCargado = stockParaFecha(f);
+    const stkEfec = stockEfectivo(f);
     const comp = comprometidoParaFecha(f);
-    const disp = Math.max(0, stk - comp);
+    const disp = Math.max(0, stkEfec - comp);
     const compMan = comprometidoParaFechaTurno(f, 'MANANA');
     const compTar = comprometidoParaFechaTurno(f, 'TARDE');
-    const dispMan = Math.max(0, stk - compMan);
-    const dispTar = Math.max(0, stk - compTar);
+    /* Ambos turnos descuentan del mismo pool: mañana va primero */
+    const dispMan = Math.max(0, stkEfec - compMan);
+    const dispTar = Math.max(0, stkEfec - compMan - compTar);
     const esHoy = f === hoy;
     return '<tr' + (esHoy ? ' style="background:rgba(200,149,106,0.08);font-weight:600"' : '') + '>' +
       '<td>' + fmtDateShort(f) + (esHoy ? ' (hoy)' : '') + '</td>' +
-      '<td>' + num(stk) + '</td>' +
+      '<td>' + num(stkCargado) + '</td>' +
+      '<td>' + num(stkEfec) + '</td>' +
       '<td>' + num(compMan) + '</td>' +
       '<td>' + num(dispMan) + '</td>' +
       '<td>' + num(compTar) + '</td>' +
       '<td>' + num(dispTar) + '</td>' +
-      '<td' + (disp <= 0 ? ' style="color:#22C55E;font-weight:700"' : disp < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : '') + '>' + num(disp) + '</td>' +
+      '<td' + (disp <= 0 ? ' style="color:#22C55E;font-weight:700"' : disp < stkEfec * 0.3 ? ' style="color:#FFB347;font-weight:600"' : '') + '>' + num(disp) + '</td>' +
     '</tr>';
   }).join('');
 
@@ -1487,22 +1506,22 @@ function _renderPedidosInner(el) {
       '<form id="formStock" class="form">' +
         '<div class="formRow2">' +
           '<label class="field"><span>Fecha</span><input type="date" id="stk_fecha" value="' + hoy + '" required></label>' +
-          '<label class="field"><span>Maples cargados</span><input type="number" min="0" step="1" id="stk_maples" placeholder="Ej: 8" value="' + (stockHoy || '') + '" required></label>' +
+          '<label class="field"><span>Maples cargados</span><input type="number" min="0" step="1" id="stk_maples" placeholder="Ej: 8" value="' + (stockParaFecha(hoy) || '') + '" required></label>' +
         '</div>' +
         '<button type="submit" class="btn btn--primary">💾 Guardar stock</button>' +
       '</form>' +
       (fechasStr.length ? '<div style="overflow-x:auto;margin-top:12px"><table class="tbl"><thead><tr>' +
-        '<th>Fecha</th><th>Stock</th><th>Comp. Mañana</th><th>Disp. Mañana</th><th>Comp. Tarde</th><th>Disp. Tarde</th><th>Disponible</th>' +
+        '<th>Fecha</th><th>Cargado</th><th>Efectivo</th><th>Comp. Mañana</th><th>Disp. Mañana</th><th>Comp. Tarde</th><th>Disp. Tarde</th><th>Disponible</th>' +
       '</tr></thead><tbody>' + stockRows + '</tbody></table></div>' : '') +
     '</section>' : '') +
 
     '<section class="panel">' +
       '<div class="panel__head"><h3>Disponibilidad de stock</h3></div>' +
       '<div class="statGrid">' +
-        statCard('Stock hoy', num(stockHoy) + ' maples', 'cargado para hoy', stockHoy ? 'ok' : 'danger') +
+        statCard('Stock hoy', num(stockEfecHoy) + ' maples', 'efectivo para hoy (cargado + sobrante)', stockEfecHoy ? 'ok' : 'danger') +
         statCard('Comprometido hoy', num(comprometidoHoy) + ' maples', 'reservados para hoy', comprometidoHoy ? 'warn' : 'ok') +
-        statCard('Disponible hoy', num(disponibleHoy) + ' maples', 'stock libre para hoy', disponibleHoy > 0 ? (disponibleHoy < stockHoy * 0.3 ? 'warn' : 'ok') : 'danger') +
-        statCard('Stock mañana', num(stockManana) + ' maples', 'cargado para mañana', stockManana ? 'ok' : 'danger') +
+        statCard('Disponible hoy', num(disponibleHoy) + ' maples', 'stock libre para hoy', disponibleHoy > 0 ? (disponibleHoy < stockEfecHoy * 0.3 ? 'warn' : 'ok') : 'danger') +
+        statCard('Stock mañana', num(stockEfecManana) + ' maples', 'efectivo para mañana (cargado + sobrante)', stockEfecManana ? 'ok' : 'danger') +
       '</div>' +
     '</section>' +
 
@@ -1543,7 +1562,7 @@ function _renderPedidosInner(el) {
       reservados.sort((a, b) => {
         const fa = a.fechaNecesaria || a.fechaReserva;
         const fb = b.fechaNecesaria || b.fechaReserva;
-        if (fa !== fb) return fb.localeCompare(fa);
+        if (fa !== fb) return fa.localeCompare(fb);
         const tA = a.turno === 'MANANA' ? 0 : 1;
         const tB = b.turno === 'MANANA' ? 0 : 1;
         return tA - tB;
@@ -1648,7 +1667,7 @@ function _renderPedidosInner(el) {
           const r = porDia[d];
           const esHoy = d === hoy;
           const rowStyle = esHoy ? 'style="background:rgba(200,149,106,0.08);font-weight:600"' : '';
-          const stk = stockParaFecha(d);
+          const stk = stockEfectivo(d);
           const comp = comprometidoParaFecha(d);
           const disp = Math.max(0, stk - comp);
           const turnoKeys = Object.keys(r.turnos || {});
@@ -1656,7 +1675,8 @@ function _renderPedidosInner(el) {
           const rows = turnoKeys.map((t, ti) => {
             const tt = r.turnos[t] || { huevosRes: 0, huevosResMap: 0 };
             const compT = comprometidoParaFechaTurno(d, t);
-            const dispT = Math.max(0, stk - compT);
+            const acumComp = turnoKeys.slice(0, ti + 1).reduce((s, tk) => s + comprometidoParaFechaTurno(d, tk), 0);
+            const dispT = Math.max(0, stk - acumComp);
             return '<tr ' + rowStyle + '>' +
               (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
                 '<td rowspan="' + turnoKeys.length + '" style="text-align:center">' + num(stk) + '</td>' : '') +
