@@ -633,14 +633,17 @@ function stockParaFecha(fecha) {
   const stk = state.stock.find(s => s.fecha === fecha);
   return stk ? (Number(stk.maples) || 0) : 0;
 }
+/* "Comprometido" = pedidos que descuentan del stock: tanto RESERVADO como ENTREGADO.
+   Un pedido entregado ya sacó los huevos físicamente, debe seguir restando.
+   Solo CANCELADO libera el stock. */
 function comprometidoParaFecha(fecha) {
   return state.pedidos
-    .filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha)
+    .filter(pd => (pd.estado === 'RESERVADO' || pd.estado === 'ENTREGADO') && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha)
     .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
 }
 function comprometidoParaFechaTurno(fecha, turno) {
   return state.pedidos
-    .filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha && pd.turno === turno)
+    .filter(pd => (pd.estado === 'RESERVADO' || pd.estado === 'ENTREGADO') && pd.producto === 'HUEVOS' && (pd.fechaNecesaria || pd.fechaReserva) === fecha && pd.turno === turno)
     .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
 }
 /* Calcula el stock efectivo y disponible para todas las fechas relevantes (hacia adelante).
@@ -651,6 +654,8 @@ function comprometidoParaFechaTurno(fecha, turno) {
    - Mañana (8-13) y Tarde (16-21) AMBOS descuentan del mismo pool del día
    - Comprometido total = comprometido Mañana + comprometido Tarde
    - Disponible = stock efectivo − comprometido total
+   - Comprometido incluye RESERVADO y ENTREGADO (ambos descuentan stock)
+   - Solo CANCELADO libera el stock (los huevos no salieron)
    El cálculo se hace en orden cronológico desde la fecha más antigua con stock.
 */
 const _stockCache = { _ts: 0 };
@@ -660,7 +665,7 @@ function calcularStock() {
   /* Recolectar todas las fechas relevantes: fechas con stock + fechas con pedidos reservados de huevos */
   const fechas = new Set();
   state.stock.forEach(s => fechas.add(s.fecha));
-  state.pedidos.filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS').forEach(pd => {
+  state.pedidos.filter(pd => (pd.estado === 'RESERVADO' || pd.estado === 'ENTREGADO') && pd.producto === 'HUEVOS').forEach(pd => {
     fechas.add(pd.fechaNecesaria || pd.fechaReserva);
   });
   const dias = [...fechas].sort();
@@ -1509,7 +1514,7 @@ function _renderPedidosInner(el) {
   const fechasStock = {};
   state.stock.forEach(s => { fechasStock[s.fecha] = true; });
   /* También incluir fechas que tienen pedidos pero no stock cargado, para ver el arrastre */
-  state.pedidos.filter(pd => pd.estado === 'RESERVADO' && pd.producto === 'HUEVOS').forEach(pd => {
+  state.pedidos.filter(pd => (pd.estado === 'RESERVADO' || pd.estado === 'ENTREGADO') && pd.producto === 'HUEVOS').forEach(pd => {
     fechasStock[pd.fechaNecesaria || pd.fechaReserva] = true;
   });
   const fechasStr = Object.keys(fechasStock).sort();
