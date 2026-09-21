@@ -153,6 +153,16 @@ p{margin:0;}
 .statCard__label{font-size:12px; color:var(--ink-soft);}
 .statCard__value{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin-top:3px; letter-spacing:-0.01em;}
 .statCard__sub{font-size:11px; color:var(--ink-soft); margin-top:3px;}
+.chipRow{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 12px;}
+.chip{
+  font:inherit; font-size:13px; cursor:pointer;
+  padding:6px 14px; border-radius:999px;
+  background:transparent; color:var(--ink-soft);
+  border:1px solid rgba(200,149,106,0.35);
+  transition:all .15s ease;
+}
+.chip:hover{border-color:var(--yolk); color:var(--ink);}
+.chip--on{background:var(--yolk); color:#1C1510; border-color:var(--yolk); font-weight:600;}
 
 /* ============ Panels ============ */
 .panel{
@@ -1593,24 +1603,34 @@ function _renderPedidosInner(el) {
       '</div>' +
     '</section>' +
 
-    (reservados.length ? '<section class="panel"><div class="panel__head"><h3>Pendientes de entrega</h3></div>' +
-      reservados.sort((a, b) => {
-        const fa = a.fechaNecesaria || a.fechaReserva;
-        const fb = b.fechaNecesaria || b.fechaReserva;
-        if (fa !== fb) return fa.localeCompare(fb);
-        const tA = a.turno === 'MANANA' ? 0 : 1;
-        const tB = b.turno === 'MANANA' ? 0 : 1;
-        return tA - tB;
-      }).map(pd => pedidoCard(pd, p)).join('') +
-    '</section>' : '') +
-
-    (entregados.length ? '<section class="panel"><div class="panel__head"><h3>Entregados</h3></div>' +
-      entregados.sort((a, b) => (b.fechaEntrega || b.fechaReserva).localeCompare(a.fechaEntrega || a.fechaReserva)).slice(0, 30).map(pd => pedidoCard(pd, p)).join('') +
-    '</section>' : '') +
-
-    (cancelados.length ? '<section class="panel"><div class="panel__head"><h3>Cancelados</h3></div>' +
-      cancelados.map(pd => pedidoCard(pd, p)).join('') +
-    '</section>' : '') +
+    (function(){
+      var lunes = startOfWeek(hoy);
+      var domingo = addDays(lunes, 6);
+      return '<section class="panel" id="secPedidosLista">' +
+        '<div class="panel__head"><h3>📋 Pedidos</h3></div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Desde</span><input type="date" id="fp_desde" value="' + lunes + '"></label>' +
+          '<label class="field"><span>Hasta</span><input type="date" id="fp_hasta" value="' + domingo + '"></label>' +
+        '</div>' +
+        '<div class="chipRow" id="fp_rangos">' +
+          '<button type="button" class="chip" data-rango="hoy">Hoy</button>' +
+          '<button type="button" class="chip chip--on" data-rango="semana">Esta semana</button>' +
+          '<button type="button" class="chip" data-rango="mes">Este mes</button>' +
+          '<button type="button" class="chip" data-rango="todo">Todo</button>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Estado</span><select id="fp_estado"><option value="">Todos</option><option value="RESERVADO">Reservado</option><option value="ENTREGADO">Entregado</option><option value="CANCELADO">Cancelado</option></select></label>' +
+          '<label class="field"><span>Turno</span><select id="fp_turno"><option value="">Todos</option><option value="MANANA">Mañana</option><option value="TARDE">Tarde</option></select></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Producto</span><select id="fp_producto"><option value="">Todos</option><option value="HUEVOS">Huevos</option><option value="MIEL">Miel</option></select></label>' +
+          '<label class="field"><span>Pago</span><select id="fp_pago"><option value="">Todos</option><option value="PAGADO">Pagado</option><option value="PENDIENTE">Pendiente</option></select></label>' +
+        '</div>' +
+        '<label class="field"><span>Cliente</span><input type="text" id="fp_cliente" placeholder="Buscar por nombre..."></label>' +
+        '<div id="fp_resumen" style="margin-top:6px"></div>' +
+        '<div id="fp_lista"></div>' +
+      '</section>';
+    })() +
 
     '<section class="panel" id="secReportePedidos">' +
       '<div class="panel__head"><h3>📊 Reporte de Reservas / Ventas</h3></div>' +
@@ -1717,7 +1737,7 @@ function _renderPedidosInner(el) {
                 '<td rowspan="' + turnoKeys.length + '" style="text-align:center">' + num(stk) + '</td>' : '') +
               '<td>' + TURNO_LABEL[t] + '</td>' +
               '<td>' + num(compT) + '</td>' +
-              '<td' + (dispTurno <= 0 ? ' style="color:#22C55E;font-weight:700"' : dispTurno < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : '') + '>' + num(dispTurno) + '</td>' +
+              '<td' + (dispTurno <= 0 ? ' style="color:#EF4444;font-weight:700"' : dispTurno < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : ' style="color:#22C55E;font-weight:600"') + '>' + num(dispTurno) + '</td>' +
               '<td>' + (tt.huevosRes || '-') + '</td>' +
               '<td>' + (tt.huevosResMap || '-') + '</td>' +
               (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + (r.huevosEnt || '-') + '</td>' +
@@ -1728,15 +1748,85 @@ function _renderPedidosInner(el) {
           });
           return rows.join('');
         }).join('') +
-        '</tbody></table></div>' : '<p class="muted">Sin pedidos en el período seleccionado.</p>') +
-      (lista.length ? '<div style="margin-top:14px"><strong style="color:var(--ink-soft)">Detalle (' + lista.length + ' pedidos)</strong></div>' +
-        lista.sort((a, b) => (a.fechaNecesaria || a.fechaReserva).localeCompare(b.fechaNecesaria || b.fechaReserva)).map(pd => pedidoCard(pd, p)).join('') : '');
+        '</tbody></table></div>' : '<p class="muted">Sin pedidos en el período seleccionado.</p>');
   }
   actualizarReportePedidos();
   document.getElementById('rp_desde').addEventListener('change', actualizarReportePedidos);
   document.getElementById('rp_hasta').addEventListener('change', actualizarReportePedidos);
   document.getElementById('rp_producto').addEventListener('change', actualizarReportePedidos);
   document.getElementById('rp_estado').addEventListener('change', actualizarReportePedidos);
+
+  /* --- Lista de pedidos filtrable (unificada) --- */
+  function actualizarListaPedidos() {
+    const desde = document.getElementById('fp_desde').value;
+    const hasta = document.getElementById('fp_hasta').value;
+    const fEstado = document.getElementById('fp_estado').value;
+    const fTurno = document.getElementById('fp_turno').value;
+    const fProd = document.getElementById('fp_producto').value;
+    const fPago = document.getElementById('fp_pago').value;
+    const fCli = (document.getElementById('fp_cliente').value || '').trim().toLowerCase();
+
+    let lista = state.pedidos.filter(pd => {
+      const fRef = pd.fechaNecesaria || pd.fechaReserva;
+      if (desde && fRef < desde) return false;
+      if (hasta && fRef > hasta) return false;
+      if (fEstado && pd.estado !== fEstado) return false;
+      if (fTurno && (pd.turno || 'MANANA') !== fTurno) return false;
+      if (fProd && pd.producto !== fProd) return false;
+      if (fPago === 'PAGADO' && !pd.pagado) return false;
+      if (fPago === 'PENDIENTE' && pd.pagado) return false;
+      if (fCli && !((pd.cliente || '').toLowerCase().includes(fCli))) return false;
+      return true;
+    });
+
+    lista.sort((a, b) => {
+      const fa = a.fechaNecesaria || a.fechaReserva;
+      const fb = b.fechaNecesaria || b.fechaReserva;
+      if (fa !== fb) return fa.localeCompare(fb);
+      const tA = (a.turno === 'MANANA') ? 0 : 1;
+      const tB = (b.turno === 'MANANA') ? 0 : 1;
+      return tA - tB;
+    });
+
+    const nRes = lista.filter(pd => pd.estado === 'RESERVADO').length;
+    const nEnt = lista.filter(pd => pd.estado === 'ENTREGADO').length;
+    const nCan = lista.filter(pd => pd.estado === 'CANCELADO').length;
+    const resumenEl = document.getElementById('fp_resumen');
+    if (resumenEl) {
+      resumenEl.innerHTML = '<div class="muted" style="font-size:13px">' +
+        '<strong>' + lista.length + '</strong> pedido' + (lista.length === 1 ? '' : 's') +
+        (lista.length ? ' · <span style="color:#C8956A">' + nRes + ' reservados</span> · <span style="color:#22C55E">' + nEnt + ' entregados</span>' + (nCan ? ' · <span style="color:#EF4444">' + nCan + ' cancelados</span>' : '') : '') +
+      '</div>';
+    }
+    const contEl = document.getElementById('fp_lista');
+    if (!contEl) return;
+    contEl.innerHTML = lista.length
+      ? lista.map(pd => pedidoCard(pd, p)).join('')
+      : '<p class="muted" style="margin-top:10px">No hay pedidos con estos filtros.</p>';
+  }
+
+  function setRangoActivo(rango) {
+    const btns = document.querySelectorAll('#fp_rangos .chip');
+    btns.forEach(b => b.classList.toggle('chip--on', b.getAttribute('data-rango') === rango));
+  }
+  document.querySelectorAll('#fp_rangos .chip').forEach(btn => btn.addEventListener('click', () => {
+    const rango = btn.getAttribute('data-rango');
+    const dd = document.getElementById('fp_desde');
+    const dh = document.getElementById('fp_hasta');
+    if (rango === 'hoy') { dd.value = hoy; dh.value = hoy; }
+    else if (rango === 'semana') { const l = startOfWeek(hoy); dd.value = l; dh.value = addDays(l, 6); }
+    else if (rango === 'mes') { dd.value = hoy.slice(0, 8) + '01'; const y = Number(hoy.slice(0,4)); const m = Number(hoy.slice(5,7)); const last = new Date(y, m, 0).getDate(); dh.value = hoy.slice(0,8) + pad2(last); }
+    else if (rango === 'todo') { dd.value = ''; dh.value = ''; }
+    setRangoActivo(rango);
+    actualizarListaPedidos();
+  }));
+  ['fp_desde','fp_hasta','fp_estado','fp_turno','fp_producto','fp_pago'].forEach(id => {
+    const elx = document.getElementById(id);
+    if (elx) elx.addEventListener('change', () => { if (id === 'fp_desde' || id === 'fp_hasta') setRangoActivo(''); actualizarListaPedidos(); });
+  });
+  const cliInput = document.getElementById('fp_cliente');
+  if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
+  actualizarListaPedidos();
 
   /* --- Lógica del formulario --- */
   const selProducto = document.getElementById('pd_producto');
@@ -1827,57 +1917,64 @@ function _renderPedidosInner(el) {
       toast('Stock guardado: ' + maples + ' maples para ' + fmtDateShort(fecha));
     });
   }
+  /* --- Botones de acción en cada card (delegación, sobrevive a re-renders de la lista filtrada) --- */
+  el.onclick = async (ev) => {
+    const btn = ev.target.closest('[data-entregar],[data-pagado],[data-cancelar],[data-eliminarpd],[data-editarpd],[data-metodo]');
+    if (!btn || !el.contains(btn)) return;
 
-  /* --- Botones de acción en cada card --- */
-  el.querySelectorAll('[data-entregar]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = btn.getAttribute('data-entregar');
-    const hoy2 = todayStr();
-    await actualizarPedido(id, { estado: 'ENTREGADO', fechaEntrega: hoy2 });
-    toast('Pedido entregado ✓');
-  }));
-  el.querySelectorAll('[data-pagado]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = btn.getAttribute('data-pagado');
-    const pedido = state.pedidos.find(p => p.id === id);
-    if (pedido && pedido.pagado) {
-      /* Desmarcar pago */
-      await actualizarPedido(id, { pagado: false, fechaPago: '', metodoPago: '' });
-      toast('Pago desmarcado');
+    if (btn.hasAttribute('data-metodo')) {
+      const met = btn.getAttribute('data-metodo');
+      const metDiv = btn.closest('.metodoPagoPop');
+      const id = metDiv ? metDiv.getAttribute('data-pdid') : null;
+      if (met === 'cancel') { if (metDiv) metDiv.remove(); return; }
+      if (id) { await actualizarPedido(id, { pagado: true, fechaPago: todayStr(), metodoPago: met }); toast('Pagado (' + METODO_PAGO_LABEL[met] + ') ✓'); }
+      if (metDiv) metDiv.remove();
       return;
     }
-    /* Marcar pagado: pedir método */
-    const card = btn.closest('.pedidoCard');
-    let metDiv = card.querySelector('.metodoPagoPop');
-    if (metDiv) { metDiv.remove(); return; }
-    metDiv = document.createElement('div');
-    metDiv.className = 'metodoPagoPop';
-    metDiv.style.cssText = 'margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
-    metDiv.innerHTML = '<span style="color:var(--ink-soft);font-size:0.85em">Método:</span>' +
-      METODOS_PAGO.map(m => '<button class="btn btn--sm btn--secondary" data-metodo="' + m.id + '">' + m.label + '</button>').join('') +
-      '<button class="btn btn--sm btn--ghost" data-metodo="cancel">✕</button>';
-    card.querySelector('.pedidoCard__actions').after(metDiv);
-    metDiv.querySelectorAll('[data-metodo]').forEach(mb => mb.addEventListener('click', async () => {
-      const met = mb.getAttribute('data-metodo');
-      if (met === 'cancel') { metDiv.remove(); return; }
-      const hoy2 = todayStr();
-      await actualizarPedido(id, { pagado: true, fechaPago: hoy2, metodoPago: met });
-      toast('Pagado (' + METODO_PAGO_LABEL[met] + ') ✓');
-      metDiv.remove();
-    }));
-  }));
-  el.querySelectorAll('[data-cancelar]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = btn.getAttribute('data-cancelar');
-    await actualizarPedido(id, { estado: 'CANCELADO' });
-    toast('Pedido cancelado');
-  }));
-  el.querySelectorAll('[data-eliminarpd]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = btn.getAttribute('data-eliminarpd');
-    await eliminarPedidoPorId(id);
-    toast('Pedido eliminado');
-  }));
-  el.querySelectorAll('[data-editarpd]').forEach(btn => btn.addEventListener('click', () => {
-    const id = btn.getAttribute('data-editarpd');
-    abrirEditarPedido(id);
-  }));
+
+    if (btn.hasAttribute('data-entregar')) {
+      await actualizarPedido(btn.getAttribute('data-entregar'), { estado: 'ENTREGADO', fechaEntrega: todayStr() });
+      toast('Pedido entregado ✓');
+      return;
+    }
+    if (btn.hasAttribute('data-cancelar')) {
+      await actualizarPedido(btn.getAttribute('data-cancelar'), { estado: 'CANCELADO' });
+      toast('Pedido cancelado');
+      return;
+    }
+    if (btn.hasAttribute('data-eliminarpd')) {
+      await eliminarPedidoPorId(btn.getAttribute('data-eliminarpd'));
+      toast('Pedido eliminado');
+      return;
+    }
+    if (btn.hasAttribute('data-editarpd')) {
+      abrirEditarPedido(btn.getAttribute('data-editarpd'));
+      return;
+    }
+    if (btn.hasAttribute('data-pagado')) {
+      const id = btn.getAttribute('data-pagado');
+      const pedido = state.pedidos.find(p => p.id === id);
+      if (pedido && pedido.pagado) {
+        await actualizarPedido(id, { pagado: false, fechaPago: '', metodoPago: '' });
+        toast('Pago desmarcado');
+        return;
+      }
+      const card = btn.closest('.pedidoCard');
+      if (!card) return;
+      let metDiv = card.querySelector('.metodoPagoPop');
+      if (metDiv) { metDiv.remove(); return; }
+      metDiv = document.createElement('div');
+      metDiv.className = 'metodoPagoPop';
+      metDiv.setAttribute('data-pdid', id);
+      metDiv.style.cssText = 'margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+      metDiv.innerHTML = '<span style="color:var(--ink-soft);font-size:0.85em">Método:</span>' +
+        METODOS_PAGO.map(m => '<button class="btn btn--sm btn--secondary" data-metodo="' + m.id + '">' + m.label + '</button>').join('') +
+        '<button class="btn btn--sm btn--ghost" data-metodo="cancel">✕</button>';
+      const actions = card.querySelector('.pedidoCard__actions');
+      if (actions) actions.after(metDiv); else card.appendChild(metDiv);
+      return;
+    }
+  };
 }
 
 /* ---------- Editar Pedido (modal) ---------- */
