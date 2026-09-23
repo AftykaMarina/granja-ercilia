@@ -1570,6 +1570,12 @@ function _renderPedidosInner(el) {
       '</div>' +
     '</section>' +
 
+    '<section class="panel" id="secEntregasDia">' +
+      '<div class="panel__head"><h3>🚚 Entregas del día</h3></div>' +
+      '<label class="field"><span>Fecha a entregar</span><input type="date" id="ed_fecha" value="' + hoy + '"></label>' +
+      '<div id="ed_resultado"></div>' +
+    '</section>' +
+
     '<section class="panel">' +
       '<div class="panel__head"><h3>Nuevo pedido / reserva</h3></div>' +
       '<form id="formPedido" class="form">' +
@@ -1775,7 +1781,7 @@ function _renderPedidosInner(el) {
       if (fProd && pd.producto !== fProd) return false;
       if (fPago === 'PAGADO' && !pd.pagado) return false;
       if (fPago === 'PENDIENTE' && pd.pagado) return false;
-      if (fCli && !((pd.cliente || '').toLowerCase().includes(fCli))) return false;
+      if (fCli && !((pd.clienteNombre || '').toLowerCase().includes(fCli))) return false;
       return true;
     });
 
@@ -1838,6 +1844,65 @@ function _renderPedidosInner(el) {
   const cliInput = document.getElementById('fp_cliente');
   if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
   actualizarListaPedidos();
+
+  /* --- Reporte de entregas del día (Mañana / Tarde) --- */
+  function textoCantidad(pd) {
+    if (pd.producto === 'HUEVOS') {
+      if (pd.presentacion === 'MAPLE') return pd.cantidadPresentacion + ' maples';
+      return pd.cantidadPresentacion + ' ' + (pd.presentacion === 'DOCENA' ? 'docenas' : 'medias') + ' (' + pd.cantidadUnidadesBase + ' u.)';
+    }
+    return pd.cantidadPresentacion + ' frascos';
+  }
+  function bloqueTurno(fecha, turnoId) {
+    const pedidosTurno = state.pedidos.filter(pd =>
+      pd.estado === 'RESERVADO' &&
+      (pd.fechaNecesaria || pd.fechaReserva) === fecha &&
+      (pd.turno || 'MANANA') === turnoId
+    ).sort((a, b) => (a.clienteNombre || '').localeCompare(b.clienteNombre || ''));
+
+    const maples = pedidosTurno.filter(pd => pd.producto === 'HUEVOS')
+      .reduce((s, pd) => s + (pd.presentacion === 'MAPLE' ? pd.cantidadPresentacion : Math.round(pd.cantidadUnidadesBase / 30 * 10) / 10), 0);
+    const frascos = pedidosTurno.filter(pd => pd.producto === 'MIEL')
+      .reduce((s, pd) => s + pd.cantidadPresentacion, 0);
+
+    const resumenPartes = [];
+    if (maples) resumenPartes.push(num(maples) + ' maples');
+    if (frascos) resumenPartes.push(num(frascos) + ' frascos');
+    const resumen = resumenPartes.length ? resumenPartes.join(' · ') : 'sin pedidos';
+
+    const icono = turnoId === 'MANANA' ? '🌅' : '🌇';
+    let html = '<div style="margin-top:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(200,149,106,0.25);padding-bottom:5px;margin-bottom:8px">' +
+        '<strong style="font-size:15px">' + icono + ' ' + TURNO_LABEL[turnoId] + '</strong>' +
+        '<span style="color:var(--yolk);font-weight:600;font-size:13px">' + resumen + '</span>' +
+      '</div>';
+    if (pedidosTurno.length) {
+      html += '<table class="tbl"><thead><tr><th>Cliente</th><th>Producto</th><th>Cantidad</th></tr></thead><tbody>' +
+        pedidosTurno.map(pd => '<tr>' +
+          '<td>' + escapeHtml(pd.clienteNombre || '—') + '</td>' +
+          '<td>' + (pd.producto === 'HUEVOS' ? 'Huevos' : 'Miel') + '</td>' +
+          '<td>' + textoCantidad(pd) + '</td>' +
+        '</tr>').join('') +
+        '</tbody></table>';
+    } else {
+      html += '<p class="muted" style="margin:0">No hay entregas para este turno.</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+  function actualizarEntregasDia() {
+    const fecha = document.getElementById('ed_fecha').value;
+    const cont = document.getElementById('ed_resultado');
+    if (!cont) return;
+    if (!fecha) { cont.innerHTML = '<p class="muted">Elegí una fecha.</p>'; return; }
+    const info = stockInfoParaFecha(fecha);
+    cont.innerHTML =
+      '<p class="muted" style="margin:6px 0 0">Reservas a entregar el <strong>' + fmtDateShort(fecha) + '</strong> · stock efectivo: ' + num(info.efec) + ' maples</p>' +
+      bloqueTurno(fecha, 'MANANA') +
+      bloqueTurno(fecha, 'TARDE');
+  }
+  document.getElementById('ed_fecha').addEventListener('change', actualizarEntregasDia);
+  actualizarEntregasDia();
 
   /* --- Lógica del formulario --- */
   const selProducto = document.getElementById('pd_producto');
