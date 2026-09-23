@@ -1780,16 +1780,20 @@ function _renderPedidosInner(el) {
     });
 
     lista.sort((a, b) => {
-      /* 1° estado: RESERVADO primero, luego ENTREGADO, luego CANCELADO */
-      const ordEstado = { RESERVADO: 0, ENTREGADO: 1, CANCELADO: 2 };
-      const eA = ordEstado[a.estado] != null ? ordEstado[a.estado] : 3;
-      const eB = ordEstado[b.estado] != null ? ordEstado[b.estado] : 3;
-      if (eA !== eB) return eA - eB;
-      /* 2° fecha descendente (más reciente primero) */
+      /* Prioridad: 1° Reservados, 2° Pagados, 3° el resto */
+      function rango(pd) {
+        if (pd.estado === 'RESERVADO') return 0;
+        if (pd.pagado) return 1;
+        return 2;
+      }
+      const rA = rango(a);
+      const rB = rango(b);
+      if (rA !== rB) return rA - rB;
+      /* Luego fecha descendente (más reciente primero) */
       const fa = a.fechaNecesaria || a.fechaReserva;
       const fb = b.fechaNecesaria || b.fechaReserva;
       if (fa !== fb) return fb.localeCompare(fa);
-      /* 3° turno: Mañana antes que Tarde */
+      /* Desempate: turno Mañana antes que Tarde */
       const tA = (a.turno === 'MANANA') ? 0 : 1;
       const tB = (b.turno === 'MANANA') ? 0 : 1;
       return tA - tB;
