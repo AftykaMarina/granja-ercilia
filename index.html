@@ -1555,20 +1555,7 @@ function _renderPedidosInner(el) {
         '</div>' +
         '<button type="submit" class="btn btn--primary">💾 Guardar stock</button>' +
       '</form>' +
-      (fechasStr.length ? '<div style="overflow-x:auto;margin-top:12px"><table class="tbl"><thead><tr>' +
-        '<th>Fecha</th><th>Cargado</th><th>Efectivo</th><th>Comp. Mañana</th><th>Disp. Mañana</th><th>Comp. Tarde</th><th>Disp. Tarde</th><th>Disponible</th>' +
-      '</tr></thead><tbody>' + stockRows + '</tbody></table></div>' : '') +
     '</section>' : '') +
-
-    '<section class="panel">' +
-      '<div class="panel__head"><h3>Disponibilidad de stock</h3></div>' +
-      '<div class="statGrid">' +
-        statCard('Stock hoy', num(infoHoy.efec) + ' maples', 'efectivo para hoy (cargado + sobrante)', infoHoy.efec ? 'ok' : 'danger') +
-        statCard('Comprometido hoy', num(infoHoy.compTotal) + ' maples', 'reservados para hoy', infoHoy.compTotal ? 'warn' : 'ok') +
-        statCard('Disponible hoy', num(infoHoy.dispTotal) + ' maples', 'stock libre para hoy', infoHoy.dispTotal > 0 ? (infoHoy.dispTotal < infoHoy.efec * 0.3 ? 'warn' : 'ok') : 'danger') +
-        statCard('Stock mañana', num(infoManana.efec) + ' maples', 'efectivo para mañana (cargado + sobrante)', infoManana.efec ? 'ok' : 'danger') +
-      '</div>' +
-    '</section>' +
 
     '<section class="panel" id="secEntregasDia">' +
       '<div class="panel__head"><h3>🚚 Entregas del día</h3></div>' +
@@ -1599,16 +1586,6 @@ function _renderPedidosInner(el) {
       '</form>' +
     '</section>' +
 
-    '<section class="panel">' +
-      '<div class="panel__head"><h3>Resumen</h3></div>' +
-      '<div class="statGrid">' +
-        statCard('Reservas huevos', num(totalReservadoMaples) + ' maples', num(totalReservadoEgg) + ' unidades', totalReservadoEgg ? 'warn' : 'ok') +
-        statCard('Reservas miel', num(totalReservadoMiel), 'frascos pendientes', totalReservadoMiel ? 'warn' : 'ok') +
-        statCard('Entregados huevos', num(totalEntregadoMaples) + ' maples', num(totalEntregadoEgg) + ' unidades', 'ok') +
-        statCard('Entregados miel', num(totalEntregadoMiel), 'frascos', 'ok') +
-      '</div>' +
-    '</section>' +
-
     (function(){
       var lunes = startOfWeek(hoy);
       var domingo = addDays(lunes, 6);
@@ -1636,131 +1613,7 @@ function _renderPedidosInner(el) {
         '<div id="fp_resumen" style="margin-top:6px"></div>' +
         '<div id="fp_lista"></div>' +
       '</section>';
-    })() +
-
-    '<section class="panel" id="secReportePedidos">' +
-      '<div class="panel__head"><h3>📊 Reporte de Reservas / Ventas</h3></div>' +
-      '<div class="formRow2">' +
-        '<label class="field"><span>Desde</span><input type="date" id="rp_desde" value="' + addDays(hoy, -30) + '"></label>' +
-        '<label class="field"><span>Hasta</span><input type="date" id="rp_hasta" value="' + hoy + '"></label>' +
-      '</div>' +
-      '<div class="formRow2">' +
-        '<label class="field"><span>Producto</span><select id="rp_producto"><option value="">Todos</option><option value="HUEVOS">Huevos</option><option value="MIEL">Miel</option></select></label>' +
-        '<label class="field"><span>Estado</span><select id="rp_estado"><option value="">Todos</option><option value="RESERVADO">Reservado</option><option value="ENTREGADO">Entregado</option><option value="CANCELADO">Cancelado</option></select></label>' +
-      '</div>' +
-      '<div id="rp_resultados"></div>' +
-    '</section>';
-
-  /* --- Lógica del reporte de pedidos --- */
-  function actualizarReportePedidos() {
-    const desde = document.getElementById('rp_desde').value;
-    const hasta = document.getElementById('rp_hasta').value;
-    const prodFiltro = document.getElementById('rp_producto').value;
-    const estadoFiltro = document.getElementById('rp_estado').value;
-    let lista = state.pedidos.filter(pd => {
-      const fRef = pd.fechaNecesaria || pd.fechaReserva;
-      return fRef >= desde && fRef <= hasta;
-    });
-    if (prodFiltro) lista = lista.filter(pd => pd.producto === prodFiltro);
-    if (estadoFiltro) lista = lista.filter(pd => pd.estado === estadoFiltro);
-
-    const reservadosF = lista.filter(pd => pd.estado === 'RESERVADO');
-    const entregadosF = lista.filter(pd => pd.estado === 'ENTREGADO');
-    const canceladosF = lista.filter(pd => pd.estado === 'CANCELADO');
-
-    const totalEggRes = reservadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
-    const totalEggEnt = entregadosF.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + pd.cantidadUnidadesBase, 0);
-    const totalEggResMaples = Math.floor(totalEggRes / 30);
-    const totalEggResSobrante = totalEggRes % 30;
-    const totalEggEntMaples = Math.floor(totalEggEnt / 30);
-    const totalEggEntSobrante = totalEggEnt % 30;
-    const totalMielRes = reservadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
-    const totalMielEnt = entregadosF.filter(pd => pd.producto === 'MIEL').reduce((s, pd) => s + pd.cantidadPresentacion, 0);
-
-    const total$Reservados = reservadosF.reduce((s, pd) => s + (pd.precioTotal || 0), 0);
-    const total$Entregados = entregadosF.reduce((s, pd) => s + (pd.precioTotal || 0), 0);
-    const total$Pagados = entregadosF.filter(pd => pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
-    const total$Pendiente = entregadosF.filter(pd => !pd.pagado).reduce((s, pd) => s + (pd.precioTotal || 0), 0);
-
-    /* Pedidos por día y turno para la tabla */
-    const porDia = {};
-    lista.forEach(pd => {
-      const dia = pd.fechaNecesaria || pd.fechaReserva;
-      if (!porDia[dia]) porDia[dia] = { huevosRes: 0, huevosEnt: 0, huevosResMap: 0, huevosEntMap: 0, mielRes: 0, mielEnt: 0, $reservado: 0, $entregado: 0, turnos: {} };
-      if (pd.estado === 'RESERVADO') {
-        if (pd.producto === 'HUEVOS') { porDia[dia].huevosRes += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosResMap += pd.cantidadPresentacion; }
-        else porDia[dia].mielRes += pd.cantidadPresentacion;
-        porDia[dia].$reservado += (pd.precioTotal || 0);
-        /* por turno */
-        const t = pd.turno || 'MANANA';
-        if (!porDia[dia].turnos[t]) porDia[dia].turnos[t] = { huevosRes: 0, huevosResMap: 0 };
-        if (pd.producto === 'HUEVOS') { porDia[dia].turnos[t].huevosRes += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].turnos[t].huevosResMap += pd.cantidadPresentacion; }
-      }
-      if (pd.estado === 'ENTREGADO') {
-        if (pd.producto === 'HUEVOS') { porDia[dia].huevosEnt += pd.cantidadUnidadesBase; if (pd.presentacion === 'MAPLE') porDia[dia].huevosEntMap += pd.cantidadPresentacion; }
-        else porDia[dia].mielEnt += pd.cantidadPresentacion;
-        porDia[dia].$entregado += (pd.precioTotal || 0);
-      }
-    });
-    const dias = Object.keys(porDia).sort();
-
-    const cont = document.getElementById('rp_resultados');
-    if (!cont) return;
-    cont.innerHTML =
-      '<div class="statGrid">' +
-        statCard('Huevos reservados', totalEggResMaples + ' maples' + (totalEggResSobrante ? ' + ' + totalEggResSobrante + 'u' : ''), totalEggRes + ' unidades', totalEggRes ? 'warn' : 'ok') +
-        statCard('Huevos entregados', totalEggEntMaples + ' maples' + (totalEggEntSobrante ? ' + ' + totalEggEntSobrante + 'u' : ''), totalEggEnt + ' unidades', 'ok') +
-        statCard('Miel reservada', num(totalMielRes), 'frascos', totalMielRes ? 'warn' : 'ok') +
-        statCard('Miel entregada', num(totalMielEnt), 'frascos', 'ok') +
-      '</div>' +
-      '<div class="statGrid">' +
-        statCard('$ Reservado', '$ ' + num(total$Reservados), 'pendiente de entrega', 'warn') +
-        statCard('$ Entregado', '$ ' + num(total$Entregados), 'ventas concretadas', 'ok') +
-        statCard('$ Cobrado', '$ ' + num(total$Pagados), 'pagos recibidos', 'ok') +
-        statCard('$ A cobrar', '$ ' + num(total$Pendiente), 'entregados sin pagar', 'danger') +
-      '</div>' +
-      (dias.length ?
-        '<div style="overflow-x:auto;margin-top:12px">' +
-        '<table class="tbl"><thead><tr>' +
-          '<th>Fecha</th><th>Stock</th><th>Turno</th><th>Comp.</th><th>Disp.</th><th>Huevos res.</th><th>Maples res.</th><th>Huevos ent.</th><th>Maples ent.</th><th>$ Res.</th><th>$ Ent.</th>' +
-        '</tr></thead><tbody>' +
-        dias.map(d => {
-          const r = porDia[d];
-          const esHoy = d === hoy;
-          const rowStyle = esHoy ? 'style="background:rgba(200,149,106,0.08);font-weight:600"' : '';
-          const info = stockInfoParaFecha(d);
-          const stk = info.efec;
-          const comp = info.compTotal;
-          const disp = info.dispTotal;
-          const turnoKeys = Object.keys(r.turnos || {});
-          if (turnoKeys.length === 0) turnoKeys.push('MANANA');
-          const rows = turnoKeys.map((t, ti) => {
-            const tt = r.turnos[t] || { huevosRes: 0, huevosResMap: 0 };
-            const compT = comprometidoParaFechaTurno(d, t);
-            const dispTurno = t === 'MANANA' ? info.dispMan : info.dispTar;
-            return '<tr ' + rowStyle + '>' +
-              (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + fmtDateShort(d) + (esHoy ? ' (hoy)' : '') + '</td>' +
-                '<td rowspan="' + turnoKeys.length + '" style="text-align:center">' + num(stk) + '</td>' : '') +
-              '<td>' + TURNO_LABEL[t] + '</td>' +
-              '<td>' + num(compT) + '</td>' +
-              '<td' + (dispTurno <= 0 ? ' style="color:#EF4444;font-weight:700"' : dispTurno < stk * 0.3 ? ' style="color:#FFB347;font-weight:600"' : ' style="color:#22C55E;font-weight:600"') + '>' + num(dispTurno) + '</td>' +
-              '<td>' + (tt.huevosRes || '-') + '</td>' +
-              '<td>' + (tt.huevosResMap || '-') + '</td>' +
-              (ti === 0 ? '<td rowspan="' + turnoKeys.length + '">' + (r.huevosEnt || '-') + '</td>' +
-                '<td rowspan="' + turnoKeys.length + '">' + (r.huevosEntMap || '-') + '</td>' +
-                '<td rowspan="' + turnoKeys.length + '">$ ' + num(r.$reservado) + '</td>' +
-                '<td rowspan="' + turnoKeys.length + '">$ ' + num(r.$entregado) + '</td>' : '') +
-            '</tr>';
-          });
-          return rows.join('');
-        }).join('') +
-        '</tbody></table></div>' : '<p class="muted">Sin pedidos en el período seleccionado.</p>');
-  }
-  actualizarReportePedidos();
-  document.getElementById('rp_desde').addEventListener('change', actualizarReportePedidos);
-  document.getElementById('rp_hasta').addEventListener('change', actualizarReportePedidos);
-  document.getElementById('rp_producto').addEventListener('change', actualizarReportePedidos);
-  document.getElementById('rp_estado').addEventListener('change', actualizarReportePedidos);
+    })();
 
   /* --- Lista de pedidos filtrable (unificada) --- */
   function actualizarListaPedidos() {
@@ -1786,11 +1639,11 @@ function _renderPedidosInner(el) {
     });
 
     lista.sort((a, b) => {
-      /* Prioridad: 1° Reservados, 2° Pagados, 3° el resto */
+      /* Prioridad: 1° Reservados, 2° Entregados por pagar, 3° Entregados pagados, 4° el resto */
       function rango(pd) {
         if (pd.estado === 'RESERVADO') return 0;
-        if (pd.pagado) return 1;
-        return 2;
+        if (pd.estado === 'ENTREGADO') return pd.pagado ? 2 : 1;
+        return 3;
       }
       const rA = rango(a);
       const rB = rango(b);
