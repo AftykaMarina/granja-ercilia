@@ -1546,17 +1546,6 @@ function _renderPedidosInner(el) {
   const puedeStock = PERMS[state.perfil.rol] && PERMS[state.perfil.rol].stock;
 
   el.innerHTML =
-    (puedeStock ? '<section class="panel">' +
-      '<div class="panel__head"><h3>📦 Stock de huevos (maples)</h3></div>' +
-      '<form id="formStock" class="form">' +
-        '<div class="formRow2">' +
-          '<label class="field"><span>Fecha</span><input type="date" id="stk_fecha" value="' + hoy + '" required></label>' +
-          '<label class="field"><span>Maples cargados</span><input type="number" min="0" step="1" id="stk_maples" placeholder="Ej: 8" value="' + (stockParaFecha(hoy) || '') + '" required></label>' +
-        '</div>' +
-        '<button type="submit" class="btn btn--primary">💾 Guardar stock</button>' +
-      '</form>' +
-    '</section>' : '') +
-
     '<section class="panel" id="secEntregasDia">' +
       '<div class="panel__head"><h3>🚚 Entregas del día</h3></div>' +
       '<label class="field"><span>Fecha a entregar</span><input type="date" id="ed_fecha" value="' + hoy + '"></label>' +
@@ -1627,8 +1616,12 @@ function _renderPedidosInner(el) {
 
     let lista = state.pedidos.filter(pd => {
       const fRef = pd.fechaNecesaria || pd.fechaReserva;
-      if (desde && fRef < desde) return false;
-      if (hasta && fRef > hasta) return false;
+      /* Los entregados sin pagar siempre se muestran, sin importar la fecha */
+      const faltaPago = (pd.estado === 'ENTREGADO' && !pd.pagado);
+      if (!faltaPago) {
+        if (desde && fRef < desde) return false;
+        if (hasta && fRef > hasta) return false;
+      }
       if (fEstado && pd.estado !== fEstado) return false;
       if (fTurno && (pd.turno || 'MANANA') !== fTurno) return false;
       if (fProd && pd.producto !== fProd) return false;
