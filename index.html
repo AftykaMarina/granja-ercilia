@@ -1549,7 +1549,33 @@ function abrirEditarRegistroModal(id) {
   });
 }
 
-/* editar galpon eliminado por solicitud del usuario */
+/* ---------- Modal Editar Galpón ---------- */
+function abrirEditarGalponModal(id) {
+  const g = state.galpones.find(x => x.id === id);
+  if (!g) return;
+  const modal = document.getElementById('modalEditar');
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>Editar galp\u00f3n</h3><button class="iconBtn" id="cerrarEditarG">' + ICONS.x + '</button></div>' +
+      '<form id="formEditarGalpon" class="form">' +
+        '<label class="field"><span>Nombre</span><input type="text" id="eg_nombre" value="' + escapeHtml(g.nombre || '') + '" required></label>' +
+        '<label class="field"><span>Capacidad (aves)</span><input type="number" min="0" id="eg_capacidad" value="' + (g.capacidad || 0) + '"></label>' +
+        '<button type="submit" class="btn btn--primary">Guardar cambios</button>' +
+      '</form>' +
+    '</div>';
+  modal.classList.add('modal--open');
+  document.getElementById('cerrarEditarG').addEventListener('click', () => modal.classList.remove('modal--open'));
+  document.getElementById('formEditarGalpon').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre = document.getElementById('eg_nombre').value.trim();
+    if (!nombre) { toast('Pon\u00e9 un nombre.'); return; }
+    try {
+      await actualizarGalpon(id, { nombre, capacidad: Number(document.getElementById('eg_capacidad').value) || 0 });
+      toast('Galp\u00f3n modificado \u2713');
+      modal.classList.remove('modal--open');
+    } catch (err) { toast('No se pudo guardar: ' + err.message); }
+  });
+}
 
 /* ---------- Render: Gráficos ---------- */
 let graficosPeriodo = 'semana';
@@ -1645,7 +1671,7 @@ function renderLotes() {
           '<td>' + num(f.hoyG) + '</td>' +
           '<td>' + (function() { const pp = picoPostura(f.hoyG, [f.g.id]); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
           '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
-          '<td style="text-align:right"><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galpón">' + ICONS.trash + '</button></td></tr>').join('') +
+          '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
     '</section>' +
     (filas.length ? '<section class="panel"><div class="panel__head"><h3>Comparación entre galpones (mes)</h3></div><canvas id="chartGalpones" height="220"></canvas></section>' : '');
@@ -1657,6 +1683,10 @@ function renderLotes() {
     const nuevoGalpon = { id: 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), nombre, capacidad: Number(document.getElementById('g_capacidad').value) || 0 };
     await crearGalpon(nuevoGalpon);
     toast('Galpón agregado ✓');
+  });
+
+  el.querySelectorAll('[data-edit-galpon]').forEach(btn => {
+    btn.addEventListener('click', () => abrirEditarGalponModal(btn.getAttribute('data-edit-galpon')));
   });
 
   /* Eliminar galpones (reactivado para poder borrar los cargados por error) */
@@ -1720,10 +1750,7 @@ function renderPesajes() {
           '<button type="button" data-cat="POLLITOS" class="active">Pollitos</button>' +
           '<button type="button" data-cat="GALLINAS">Gallinas</button>' +
         '</div></div>' +
-        '<div class="formRow2">' +
-          '<label class="field"><span>Lote / identificaci\u00f3n (opcional)</span><input type="text" id="ps_etiqueta" placeholder="Ej: Lote 2"></label>' +
-          '<label class="field"><span>Galp\u00f3n (opcional)</span><select id="ps_galpon">' + opcionesGalpon + '</select></label>' +
-        '</div>' +
+        '<label class="field"><span>Galp\u00f3n</span><select id="ps_galpon">' + opcionesGalpon + '</select></label>' +
         '<label class="field"><span>Cantidad de pesajes</span><input type="number" min="1" max="200" id="ps_cantidad" placeholder="Ej: 10"></label>' +
         '<div id="psPesos"></div>' +
         '<div class="pesajeResumen" id="psResumen"></div>' +
@@ -1804,7 +1831,7 @@ function renderPesajes() {
       id: 'ps_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       fecha,
       categoria: catSel,
-      etiqueta: document.getElementById('ps_etiqueta').value.trim(),
+      etiqueta: '',
       galponId: document.getElementById('ps_galpon').value || '',
       unidad: unidadSel.value,
       pesos,
