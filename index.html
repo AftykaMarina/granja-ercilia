@@ -287,6 +287,28 @@ p{margin:0;}
 .table tr:hover td{background:rgba(200,149,106,0.06);}
 .muted{color:var(--ink-soft); font-size:11.5px;}
 
+/* ============ Pesajes ============ */
+.pesoGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:9px;}
+@media(max-width:380px){.pesoGrid{grid-template-columns:repeat(2,1fr);}}
+.pesoCell{display:flex; flex-direction:column; gap:4px;}
+.pesoCell span{font-size:11px; color:var(--ink-soft);}
+.pesoCell input{font-family:'Inter',sans-serif; font-size:15px; color:var(--ink); border:1.5px solid var(--line); border-radius:10px; padding:9px 10px; background:var(--cream); outline:none; text-align:center; transition:border-color .15s ease, box-shadow .15s ease;}
+.pesoCell input:focus{border-color:var(--yolk-dark); box-shadow:0 0 0 3px rgba(200,149,106,0.18);}
+.pesajeResumen{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:4px;}
+.pesajeResumen>div{background:var(--cream-2); border-radius:11px; padding:10px 8px; text-align:center;}
+.pesajeResumen .pr__label{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em;}
+.pesajeResumen .pr__value{font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin-top:3px; color:var(--ink);}
+.pesajeResumen .pr__value.big{color:var(--yolk-light);}
+.pesajeCard{background:rgba(30,41,59,0.5); border-radius:14px; padding:14px 15px; margin-bottom:10px; border:1px solid rgba(200,149,106,0.08);}
+.pesajeCard__top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:6px;}
+.pesajeCard__badge{display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:3px 9px; border-radius:999px; margin-bottom:5px;}
+.pesajeCard__badge--pollitos{background:var(--warn-bg); color:var(--warn);}
+.pesajeCard__badge--gallinas{background:var(--ok-bg); color:#6DC87A;}
+.pesajeCard__prom{font-family:'Fraunces',serif; font-size:22px; font-weight:600; color:var(--yolk-light);}
+.pesajeCard__meta{font-size:12px; color:var(--ink-soft); margin-top:3px; line-height:1.5;}
+.pesajeCard__obs{font-size:12px; color:var(--ink-soft); font-style:italic; margin-top:6px;}
+.pesajeCard__pesos{font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.6;}
+
 /* ============ Bottom nav ============ */
 .bottomNav{
   position:fixed; left:0; right:0; bottom:0;
@@ -524,6 +546,7 @@ h1,h2,h3,h4{color:var(--ink);}
     <div class="view" id="view-pedidos"></div>
     <div class="view" id="view-graficos"></div>
     <div class="view" id="view-lotes"></div>
+    <div class="view" id="view-pesajes"></div>
     <div class="view" id="view-reportes"></div>
   </main>
 
@@ -579,10 +602,13 @@ async function guardarPedidosLocal() {
 async function guardarStockLocal() {
   await storeSet('stock', JSON.stringify(state.stock), true);
 }
+async function guardarPesajesLocal() {
+  await storeSet('pesajes', JSON.stringify(state.pesajes), true);
+}
 
 /* ---------- Sincronización en la nube (Firebase Firestore) ---------- */
 let fbApp = null, db = null, cloudConfig = null;
-let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null, unsubStock = null;
+let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null, unsubStock = null, unsubPesajes = null;
 
 function loadCloudConfig() {
   try {
@@ -615,6 +641,7 @@ function setupListeners() {
   if (unsubGalpones) unsubGalpones();
   if (unsubPedidos) unsubPedidos();
   if (unsubStock) unsubStock();
+  if (unsubPesajes) unsubPesajes();
   unsubRegistros = db.collection('registros').onSnapshot(snap => {
     state.registros = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
@@ -636,6 +663,10 @@ function setupListeners() {
     state.stock = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
   }, err => { toast('Error de sincronización stock: ' + err.message); });
+  unsubPesajes = db.collection('pesajes').onSnapshot(snap => {
+    state.pesajes = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización pesajes: ' + err.message); });
 }
 
 function onDataChanged() {
@@ -707,6 +738,27 @@ async function eliminarGalponPorId(id) {
     await guardarGalponesLocal();
     renderLotes();
   }
+}
+
+/* ---------- Operaciones de pesajes (nube / local) ---------- */
+async function crearPesaje(p) {
+  if (db) {
+    const { id } = p; const data = Object.assign({}, p); delete data.id;
+    await db.collection('pesajes').doc(id).set(data);
+  } else {
+    state.pesajes.push(p);
+    await guardarPesajesLocal();
+    renderCurrentView();
+  }
+}
+async function eliminarPesajePorId(id) {
+  if (db) {
+    await db.collection('pesajes').doc(id).delete();
+  } else {
+    state.pesajes = state.pesajes.filter(p => p.id !== id);
+    await guardarPesajesLocal();
+  }
+  renderCurrentView();
 }
 
 /* ---------- Operaciones de pedidos (nube / local) ---------- */
@@ -837,9 +889,9 @@ async function eliminarPedidoPorId(id) {
     renderCurrentView();
   }
 }
-async function restaurarDatos(registros, galpones, pedidos, stockItems) {
+async function restaurarDatos(registros, galpones, pedidos, stockItems, pesajes) {
   if (db) {
-    const colecciones = ['registros', 'galpones', 'pedidos', 'stock'];
+    const colecciones = ['registros', 'galpones', 'pedidos', 'stock', 'pesajes'];
     for (const nombre of colecciones) {
       const snap = await db.collection(nombre).get();
       let batch = db.batch(); let count = 0;
@@ -871,16 +923,23 @@ async function restaurarDatos(registros, galpones, pedidos, stockItems) {
       batch.set(db.collection('stock').doc(id), data); count++;
       if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
     }
+    for (const ps of (pesajes || [])) {
+      const data = Object.assign({}, ps); const id = data.id; delete data.id;
+      batch.set(db.collection('pesajes').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
     if (count) await batch.commit();
   } else {
     state.registros = registros;
     state.galpones = galpones;
     state.pedidos = pedidos || [];
     state.stock = stockItems || [];
+    state.pesajes = pesajes || [];
     await guardarRegistrosLocal();
     await guardarGalponesLocal();
     await guardarPedidosLocal();
     await guardarStockLocal();
+    await guardarPesajesLocal();
   }
 }
 
@@ -890,6 +949,7 @@ const state = {
   galpones: [],
   pedidos: [],
   stock: [],
+  pesajes: [],
   perfil: { rol: 'Administrador', nombre: '' },
   activeTab: 'inicio',
   charts: {},
@@ -1107,7 +1167,8 @@ const ICONS = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   egg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8 2 5 9 5 14a7 7 0 0 0 14 0c0-5-3-12-7-12Z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
-  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16L12 21L3 16V8L12 3L21 8Z"/><path d="M12 12L21 8"/><path d="M12 12V21"/><path d="M12 12L3 8"/></svg>'
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16L12 21L3 16V8L12 3L21 8Z"/><path d="M12 12L21 8"/><path d="M12 12V21"/><path d="M12 12L3 8"/></svg>',
+  scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v17"/><path d="M7 20h10"/><path d="M4.5 7h15"/><path d="M12 3.1a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"/><path d="M4.5 7 2 13h5L4.5 7Z"/><path d="M19.5 7 17 13h5l-2.5-6Z"/></svg>'
 };
 
 /* ---------- Render: shell / navegación ---------- */
@@ -1117,6 +1178,7 @@ const TABS = [
   { id: 'pedidos', label: 'Pedidos', icon: 'box' },
   { id: 'graficos', label: 'Gráficos', icon: 'chart' },
   { id: 'lotes', label: 'Galpones', icon: 'barn' },
+  { id: 'pesajes', label: 'Pesajes', icon: 'scale' },
   { id: 'reportes', label: 'Reportes', icon: 'doc' }
 ];
 
@@ -1169,6 +1231,7 @@ function renderCurrentView() {
     else if (state.activeTab === 'pedidos') renderPedidos();
     else if (state.activeTab === 'graficos') renderGraficos();
     else if (state.activeTab === 'lotes') renderLotes();
+    else if (state.activeTab === 'pesajes') renderPesajes();
     else if (state.activeTab === 'reportes') renderReportes();
   } catch(e) {
     console.error('renderCurrentView error:', e);
@@ -1577,12 +1640,12 @@ function renderLotes() {
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
-      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th></tr></thead><tbody>' +
+      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th><th></th></tr></thead><tbody>' +
         filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + '</td>' +
           '<td>' + num(f.hoyG) + '</td>' +
           '<td>' + (function() { const pp = picoPostura(f.hoyG, [f.g.id]); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
           '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
-          '<td>—</td></tr>').join('') +
+          '<td style="text-align:right"><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galpón">' + ICONS.trash + '</button></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
     '</section>' +
     (filas.length ? '<section class="panel"><div class="panel__head"><h3>Comparación entre galpones (mes)</h3></div><canvas id="chartGalpones" height="220"></canvas></section>' : '');
@@ -1596,11 +1659,193 @@ function renderLotes() {
     toast('Galpón agregado ✓');
   });
 
-  /* Editar y eliminar galpones deshabilitados por solicitud del usuario */
+  /* Eliminar galpones (reactivado para poder borrar los cargados por error) */
+  el.querySelectorAll('[data-del-galpon]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-del-galpon');
+      const g = state.galpones.find(x => x.id === id);
+      if (!g) return;
+      const regsG = state.registros.filter(r => r.galponId === id);
+      let ok;
+      if (regsG.length) {
+        ok = confirm('El galpón "' + g.nombre + '" tiene ' + regsG.length + ' registro(s) de producción cargados. Si lo borrás, esos registros quedarán sin galpón asignado.\n\n¿Borrar igual?');
+      } else {
+        ok = confirm('¿Eliminar el galpón "' + g.nombre + '"? Esta acción no se puede deshacer.');
+      }
+      if (!ok) return;
+      try {
+        await eliminarGalponPorId(id);
+        toast('Galpón eliminado ✓');
+      } catch (e) {
+        toast('No se pudo eliminar: ' + e.message);
+      }
+    });
+  });
 
   if (filas.length) {
     drawComparacionGalpones('chartGalpones', filas);
   }
+}
+
+/* ---------- Render: Pesajes (gallinas / pollitos) ---------- */
+function pesajeStats(p) {
+  const ws = (p.pesos || []).map(Number).filter(v => !isNaN(v) && v > 0);
+  if (!ws.length) return { n: 0, prom: 0, min: 0, max: 0 };
+  const sum = ws.reduce((a, b) => a + b, 0);
+  return { n: ws.length, prom: sum / ws.length, min: Math.min(...ws), max: Math.max(...ws) };
+}
+function fmtPeso(v, unidad) {
+  if (v === null || v === undefined || isNaN(v)) return '\u2014';
+  const u = unidad === 'kg' ? 'kg' : 'g';
+  const dec = u === 'kg' ? 2 : 1;
+  return Number(v).toLocaleString('es-AR', { maximumFractionDigits: dec }) + ' ' + u;
+}
+
+function renderPesajes() {
+  const el = document.getElementById('view-pesajes');
+  const hoy = todayStr();
+  const opcionesGalpon = '<option value="">\u2014 Sin asignar \u2014</option>' + state.galpones.map(g => '<option value="' + g.id + '">' + escapeHtml(g.nombre) + '</option>').join('');
+  const lista = [...state.pesajes].sort((a, b) => (b.fecha + (b.creadoEn || '')).localeCompare(a.fecha + (a.creadoEn || '')));
+
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Nuevo pesaje</h3></div>' +
+      '<p class="modalNote" style="margin-bottom:11px">No hace falta pesar todas las aves: pes\u00e1 una muestra y la app saca el promedio sola.</p>' +
+      '<form id="formPesaje" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha</span><input type="date" id="ps_fecha" value="' + hoy + '" required></label>' +
+          '<label class="field"><span>Peso en</span><select id="ps_unidad"><option value="g">Gramos (g)</option><option value="kg">Kilos (kg)</option></select></label>' +
+        '</div>' +
+        '<div class="field"><span>Categor\u00eda</span><div class="segmented" id="ps_cat">' +
+          '<button type="button" data-cat="POLLITOS" class="active">Pollitos</button>' +
+          '<button type="button" data-cat="GALLINAS">Gallinas</button>' +
+        '</div></div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Lote / identificaci\u00f3n (opcional)</span><input type="text" id="ps_etiqueta" placeholder="Ej: Lote 2"></label>' +
+          '<label class="field"><span>Galp\u00f3n (opcional)</span><select id="ps_galpon">' + opcionesGalpon + '</select></label>' +
+        '</div>' +
+        '<label class="field"><span>Cantidad de pesajes</span><input type="number" min="1" max="200" id="ps_cantidad" placeholder="Ej: 10"></label>' +
+        '<div id="psPesos"></div>' +
+        '<div class="pesajeResumen" id="psResumen"></div>' +
+        '<label class="field"><span>Observaciones (opcional)</span><textarea id="ps_obs" rows="2" placeholder="Ej: lote sano, buen tama\u00f1o"></textarea></label>' +
+        '<button type="submit" class="btn btn--primary">Guardar pesaje</button>' +
+      '</form>' +
+    '</section>' +
+    (lista.length >= 2 ? '<section class="panel"><div class="panel__head"><h3>Evoluci\u00f3n del peso promedio</h3></div><canvas id="chartPesajes" height="220"></canvas></section>' : '') +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Historial de pesajes</h3></div>' +
+      (lista.length ? lista.map(p => {
+        const st = pesajeStats(p);
+        const g = state.galpones.find(x => x.id === p.galponId);
+        const badgeCls = p.categoria === 'GALLINAS' ? 'pesajeCard__badge--gallinas' : 'pesajeCard__badge--pollitos';
+        const catLabel = p.categoria === 'GALLINAS' ? 'Gallinas' : 'Pollitos';
+        const pesosTxt = (p.pesos || []).map(v => fmtPeso(Number(v), p.unidad)).join(' \u00b7 ');
+        return '<div class="pesajeCard">' +
+          '<div class="pesajeCard__top"><div>' +
+            '<span class="pesajeCard__badge ' + badgeCls + '">' + catLabel + (p.etiqueta ? ' \u00b7 ' + escapeHtml(p.etiqueta) : '') + '</span>' +
+            '<div class="pesajeCard__prom">' + fmtPeso(st.prom, p.unidad) + ' <span class="muted" style="font-size:12px">promedio</span></div>' +
+          '</div>' +
+          '<button class="iconBtn iconBtn--danger" data-del-pesaje="' + p.id + '" title="Eliminar">' + ICONS.trash + '</button>' +
+          '</div>' +
+          '<div class="pesajeCard__meta">' + fmtDateLong(p.fecha) + ' \u00b7 ' + st.n + ' aves pesadas \u00b7 m\u00edn ' + fmtPeso(st.min, p.unidad) + ' / m\u00e1x ' + fmtPeso(st.max, p.unidad) + (g ? ' \u00b7 ' + escapeHtml(g.nombre) : '') + (p.usuario ? ' \u00b7 ' + escapeHtml(p.usuario) : '') + '</div>' +
+          (p.observaciones ? '<div class="pesajeCard__obs">' + escapeHtml(p.observaciones) + '</div>' : '') +
+          (pesosTxt ? '<div class="pesajeCard__pesos"><strong>Pesos:</strong> ' + pesosTxt + '</div>' : '') +
+          '</div>';
+      }).join('') : emptyState('Todav\u00eda no cargaste ning\u00fan pesaje.', null)) +
+    '</section>';
+
+  let catSel = 'POLLITOS';
+  const catWrap = document.getElementById('ps_cat');
+  catWrap.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    catWrap.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    catSel = b.getAttribute('data-cat');
+  }));
+
+  const unidadSel = document.getElementById('ps_unidad');
+  const cantInput = document.getElementById('ps_cantidad');
+  const pesosWrap = document.getElementById('psPesos');
+  const resumenWrap = document.getElementById('psResumen');
+
+  function leerPesos() { return Array.from(pesosWrap.querySelectorAll('.pesoInput')).map(i => i.value); }
+  function cell(l, v) { return '<div><div class="pr__label">' + l + '</div><div class="pr__value">' + v + '</div></div>'; }
+  function cellBig(l, v) { return '<div><div class="pr__label">' + l + '</div><div class="pr__value big">' + v + '</div></div>'; }
+  function calcResumen() {
+    const u = unidadSel.value;
+    const ws = leerPesos().map(Number).filter(v => !isNaN(v) && v > 0);
+    if (!ws.length) { resumenWrap.innerHTML = ''; return; }
+    const sum = ws.reduce((a, b) => a + b, 0); const prom = sum / ws.length;
+    resumenWrap.innerHTML = cell('Muestras', ws.length) + cellBig('Promedio', fmtPeso(prom, u)) + cell('M\u00ednimo', fmtPeso(Math.min(...ws), u)) + cell('M\u00e1ximo', fmtPeso(Math.max(...ws), u));
+  }
+  function rebuildPesos() {
+    let n = parseInt(cantInput.value, 10);
+    if (isNaN(n) || n < 1) { pesosWrap.innerHTML = ''; resumenWrap.innerHTML = ''; return; }
+    if (n > 200) { n = 200; cantInput.value = 200; }
+    const prev = leerPesos();
+    let html = '<div class="pesoGrid">';
+    for (let i = 0; i < n; i++) {
+      const val = prev[i] !== undefined ? prev[i] : '';
+      html += '<div class="pesoCell"><span>N\u00b0 ' + (i + 1) + '</span><input class="pesoInput" type="number" inputmode="decimal" step="any" min="0" value="' + escapeHtml(String(val)) + '"></div>';
+    }
+    html += '</div>';
+    pesosWrap.innerHTML = html;
+    pesosWrap.querySelectorAll('.pesoInput').forEach(inp => inp.addEventListener('input', calcResumen));
+    calcResumen();
+  }
+  cantInput.addEventListener('input', rebuildPesos);
+  unidadSel.addEventListener('change', calcResumen);
+
+  document.getElementById('formPesaje').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fecha = document.getElementById('ps_fecha').value || hoy;
+    const pesos = leerPesos().map(Number).filter(v => !isNaN(v) && v > 0);
+    if (!pesos.length) { toast('Cargá al menos un peso.'); return; }
+    const pesaje = {
+      id: 'ps_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      fecha,
+      categoria: catSel,
+      etiqueta: document.getElementById('ps_etiqueta').value.trim(),
+      galponId: document.getElementById('ps_galpon').value || '',
+      unidad: unidadSel.value,
+      pesos,
+      observaciones: document.getElementById('ps_obs').value.trim(),
+      usuario: state.perfil.nombre || '',
+      creadoEn: new Date().toISOString()
+    };
+    try { await crearPesaje(pesaje); toast('Pesaje guardado \u2713'); }
+    catch (err) { toast('No se pudo guardar: ' + err.message); }
+  });
+
+  el.querySelectorAll('[data-del-pesaje]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('\u00bfEliminar este pesaje?')) return;
+    try { await eliminarPesajePorId(btn.getAttribute('data-del-pesaje')); toast('Pesaje eliminado \u2713'); }
+    catch (e) { toast('No se pudo eliminar: ' + e.message); }
+  }));
+
+  if (lista.length >= 2) drawPesajesChart('chartPesajes');
+}
+
+function drawPesajesChart(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  const orden = [...state.pesajes].sort((a, b) => (a.fecha + (a.creadoEn || '')).localeCompare(b.fecha + (b.creadoEn || '')));
+  const labels = orden.map(p => fmtDateShort(p.fecha));
+  const toG = p => { const s = pesajeStats(p); return p.unidad === 'kg' ? s.prom * 1000 : s.prom; };
+  const dataPoll = orden.map(p => p.categoria === 'POLLITOS' ? Math.round(toG(p)) : null);
+  const dataGall = orden.map(p => p.categoria === 'GALLINAS' ? Math.round(toG(p)) : null);
+  const datasets = [];
+  if (dataPoll.some(v => v !== null)) datasets.push({ label: 'Pollitos', data: dataPoll, borderColor: '#FFB347', backgroundColor: 'rgba(255,179,71,0.14)', tension: 0.3, spanGaps: true, pointRadius: 3, borderWidth: 2.5 });
+  if (dataGall.some(v => v !== null)) datasets.push({ label: 'Gallinas', data: dataGall, borderColor: '#6DC87A', backgroundColor: 'rgba(109,200,122,0.14)', tension: 0.3, spanGaps: true, pointRadius: 3, borderWidth: 2.5 });
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false,
+      plugins: { legend: { display: true, labels: { color: '#94A3B8', font: baseFont() } }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y + ' g' } } },
+      scales: { x: { ticks: { font: baseFont(), maxTicksLimit: 8, color: '#94A3B8' }, grid: { display: false } }, y: { ticks: { font: baseFont(), color: '#94A3B8', callback: v => v + ' g' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true } }
+    }
+  });
 }
 
 /* ---------- Render: Pedidos (Reservas / Ventas) ---------- */
@@ -2651,7 +2896,7 @@ function renderPerfilModal() {
     cerrarPerfil();
   });
   document.getElementById('btnExportarRespaldo').addEventListener('click', () => {
-    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, stock: state.stock, exportadoEn: new Date().toISOString() }, null, 2);
+    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, stock: state.stock, pesajes: state.pesajes, exportadoEn: new Date().toISOString() }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2665,7 +2910,7 @@ function renderPerfilModal() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (Array.isArray(data.registros) && Array.isArray(data.galpones)) {
-        await restaurarDatos(data.registros, data.galpones, data.pedidos || [], data.stock || []);
+        await restaurarDatos(data.registros, data.galpones, data.pedidos || [], data.stock || [], data.pesajes || []);
         toast('Respaldo restaurado ✓');
         cerrarPerfil();
         renderCurrentView();
@@ -2716,6 +2961,8 @@ async function cargarDatosLocales() {
   if (pd) { try { state.pedidos = JSON.parse(pd); } catch (e) {} }
   const st = await storeGet('stock', true);
   if (st) { try { state.stock = JSON.parse(st); } catch (e) {} }
+  const ps = await storeGet('pesajes', true);
+  if (ps) { try { state.pesajes = JSON.parse(ps); } catch (e) {} }
   if (!state.galpones.length) {
     state.galpones = [{ id: 'g_default', nombre: 'Galpón 1', capacidad: 0 }];
     await guardarGalponesLocal();
