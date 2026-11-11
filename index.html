@@ -1112,6 +1112,21 @@ function picoPostura(huevos, galponIds) {
   const aves = totalGallinas(galponIds);
   return aves > 0 ? (huevos / aves) * 100 : null;
 }
+/* Gallinas del recuento más reciente: capacidad del galpón del último registro cargado.
+   Si no hay registros o ese galpón no tiene capacidad, usa el total de todos los galpones. */
+function gallinasRecuentoReciente() {
+  if (state.registros && state.registros.length) {
+    const ult = state.registros.slice().sort((a, b) =>
+      ((b.fecha || '') + (b.hora || '')).localeCompare((a.fecha || '') + (a.hora || '')) ||
+      ((b.creadoEn || 0) - (a.creadoEn || 0))
+    )[0];
+    if (ult && ult.galponId) {
+      const cap = totalGallinas([ult.galponId]);
+      if (cap > 0) return cap;
+    }
+  }
+  return totalGallinas() || 0;
+}
 
 /* ---------- Alertas ---------- */
 function computeAlerts() {
@@ -1297,7 +1312,7 @@ function renderInicio() {
       statCard('Mes', num(Math.floor(aggMes.total / 30)) + (aggMes.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggMes.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
       statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
       statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
-      (function() { const pp = picoPostura(aggHoy.total); return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
+      (function() { const aves = gallinasRecuentoReciente(); const pp = aves > 0 ? (aggHoy.total / aves) * 100 : null; return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
     '</section>' +
 
     '<section class="panel">' +
@@ -2505,7 +2520,7 @@ function renderReportes() {
           '<tr><td>Rotos</td><td>' + num(agg.rotos) + ' (' + pct(rotosPct) + ')</td></tr>' +
           '<tr><td>Sucios / descartados</td><td>' + num(agg.sucios) + '</td></tr>' +
           '<tr><td>Días con registro</td><td>' + diasConDatos(lista) + '</td></tr>' +
-          (function() { const pp = picoPostura(agg.total); return pp !== null ? '<tr><td>Pico de postura (período)</td><td><strong>' + pct(pp) + '</strong> huevos/gallinas</td></tr>' : ''; })() +
+          (function() { const aves = gallinasRecuentoReciente(); const dias = diasConDatos(lista); const pp = (aves > 0 && dias > 0) ? ((agg.total / dias) / aves) * 100 : null; return pp !== null ? '<tr><td>Pico de postura promedio</td><td><strong>' + pct(pp) + '</strong> huevos/gallinas</td></tr>' : ''; })() +
           '</tbody></table></div>'
       ) : emptyState('No hay registros en este período.', null)) +
     '</section>' +
@@ -2734,8 +2749,9 @@ async function exportarPDF(desde, hasta) {
     ['Sucios / descartados', num(agg.sucios)],
     ['D\u00edas con registro', String(diasConDatos(lista))]
   ];
-  const ppPdf = picoPostura(agg.total);
-  if (ppPdf !== null) resumenBody.push(['Pico de postura', pct(ppPdf) + ' huevos/gallinas']);
+  const avesPdf = gallinasRecuentoReciente(); const diasPdf = diasConDatos(lista);
+  const ppPdf = (avesPdf > 0 && diasPdf > 0) ? ((agg.total / diasPdf) / avesPdf) * 100 : null;
+  if (ppPdf !== null) resumenBody.push(['Pico de postura promedio', pct(ppPdf) + ' huevos/gallinas']);
   doc.autoTable({
     startY: y, margin: { left: marginX, right: marginX },
     head: [['Indicador', 'Valor']], body: resumenBody,
@@ -2835,8 +2851,9 @@ function exportarExcel(desde, hasta) {
     { Indicador: 'Sucios/Descartados', Valor: agg.sucios },
     { Indicador: 'Días con registro', Valor: diasConDatos(lista) }
   ];
-  const ppExcel = picoPostura(agg.total);
-  if (ppExcel !== null) resumen.push({ Indicador: 'Pico de postura (%)', Valor: Number(ppExcel.toFixed(2)) });
+  const avesExcel = gallinasRecuentoReciente(); const diasExcel = diasConDatos(lista);
+  const ppExcel = (avesExcel > 0 && diasExcel > 0) ? ((agg.total / diasExcel) / avesExcel) * 100 : null;
+  if (ppExcel !== null) resumen.push({ Indicador: 'Pico de postura promedio (%)', Valor: Number(ppExcel.toFixed(2)) });
 
   const wb = XLSX.utils.book_new();
   const wsResumen = XLSX.utils.json_to_sheet(resumen);
