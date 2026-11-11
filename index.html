@@ -1343,13 +1343,13 @@ function renderInicio() {
       (function() { const aves = gallinasRecuentoReciente(); const pp = aves > 0 ? (aggHoy.total / aves) * 100 : null; return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
     '</section>' +
 
-    '<section class="panel">' +
-      '<div class="panel__head"><h3>Armado de maples de hoy</h3></div>' +
-      '<div class="formRow2" style="margin-bottom:10px;">' +
-        '<label class="field"><span>Maples a armar</span><input type="number" min="0" max="999" id="mp_maples" value="' + arm.maples + '"></label>' +
-        '<label class="field"><span>Lugares del 3 por maple</span><input type="number" min="0" max="30" id="mp_reserva" value="' + arm.reservaPorMaple + '"></label>' +
-      '</div>' +
-      (aggHoy.total ? (
+    (aggHoy.total ? (
+      '<section class="panel">' +
+        '<div class="panel__head"><h3>Armado de maples de hoy</h3></div>' +
+        '<div class="formRow2" style="margin-bottom:10px;">' +
+          '<label class="field"><span>Maples a armar</span><input type="number" min="0" max="999" id="mp_maples" value="' + arm.maples + '"></label>' +
+          '<label class="field"><span>Lugares del 3 por maple</span><input type="number" min="0" max="30" id="mp_reserva" value="' + arm.reservaPorMaple + '"></label>' +
+        '</div>' +
         '<div class="tableWrap"><table class="table"><tbody>' +
           '<tr><td>Del 1 · Extra grandes</td><td><strong>' + num(arm.ponerUno) + '</strong> <span class="muted">(tenés ' + num(arm.dispUno) + ')</span></td></tr>' +
           '<tr><td>Del 2 · Grandes</td><td><strong>' + num(arm.ponerDos) + '</strong> <span class="muted">(tenés ' + num(arm.dispDos) + ')</span></td></tr>' +
@@ -1357,14 +1357,18 @@ function renderInicio() {
           '<tr><td>Total para ' + num(arm.maples) + ' maples</td><td>' + num(arm.totalLugares) + ' lugares</td></tr>' +
         '</tbody></table></div>' +
         (arm.faltan > 0 ? '<p class="modalNote" style="margin-top:8px;color:var(--warn)">Te faltan ' + num(arm.faltan) + ' huevos para llenar los ' + num(arm.maples) + ' maples con la producción de hoy.</p>' : '') +
-        ((arm.dispUno - arm.ponerUno > 0 || arm.dispDos - arm.ponerDos > 0 || arm.dispTres - arm.ponerTres > 0) ? '<p class="modalNote" style="margin-top:6px">Te sobran: ' + num(arm.dispUno - arm.ponerUno) + ' del 1, ' + num(arm.dispDos - arm.ponerDos) + ' del 2 y ' + num(arm.dispTres - arm.ponerTres) + ' del 3.</p>' : '')
-      ) : emptyState('Cargá la producción de hoy para ver el armado.', 'Registrar ahora')) +
-    '</section>' +
-
-    '<section class="panel">' +
-      '<div class="panel__head"><h3>Clasificación de hoy</h3></div>' +
-      (aggHoy.total ? '<canvas id="chartHoyBarras" height="180"></canvas>' : emptyState('Todavía no cargaste producción hoy.', 'Registrar ahora')) +
-    '</section>';
+        ((arm.dispUno - arm.ponerUno > 0 || arm.dispDos - arm.ponerDos > 0 || arm.dispTres - arm.ponerTres > 0) ? '<p class="modalNote" style="margin-top:6px">Te sobran: ' + num(arm.dispUno - arm.ponerUno) + ' del 1, ' + num(arm.dispDos - arm.ponerDos) + ' del 2 y ' + num(arm.dispTres - arm.ponerTres) + ' del 3.</p>' : '') +
+      '</section>' +
+      '<section class="panel">' +
+        '<div class="panel__head"><h3>Clasificación de hoy</h3></div>' +
+        '<canvas id="chartHoyBarras" height="180"></canvas>' +
+      '</section>'
+    ) : (
+      '<section class="panel">' +
+        '<div class="panel__head"><h3>Producción de hoy</h3></div>' +
+        emptyState('Todavía no cargaste producción hoy.', 'Registrar ahora') +
+      '</section>'
+    ));
 
   try { if (aggHoy.total) { drawBarPorTamano('chartHoyBarras', aggHoy); } } catch(chartErr) { console.warn('Chart error:', chartErr); }
 
