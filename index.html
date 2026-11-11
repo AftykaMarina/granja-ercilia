@@ -951,6 +951,7 @@ const state = {
   stock: [],
   pesajes: [],
   perfil: { rol: 'Administrador', nombre: '' },
+  maplesConfig: { maples: 7, reservaTres: 4 },
   activeTab: 'inicio',
   charts: {},
   reportRange: { desde: null, hasta: null }
@@ -1128,6 +1129,32 @@ function gallinasRecuentoReciente() {
   return totalGallinas() || 0;
 }
 
+/* ---------- Armado de maples del día ----------
+   1 = extra grandes, 2 = grandes, 3 = medianos.
+   Se llenan primero todos los "del 1" disponibles, el resto con "del 2",
+   y se reservan N lugares por maple para los "del 3". Usa la producción de hoy. */
+async function guardarMaplesConfig() {
+  await storeSet('maplesConfig', JSON.stringify(state.maplesConfig), false);
+}
+function calcularArmadoMaples(aggHoy) {
+  const cfg = state.maplesConfig || { maples: 7, reservaTres: 4 };
+  const maples = Math.max(0, Math.floor(Number(cfg.maples) || 0));
+  const reservaPorMaple = Math.max(0, Math.min(30, Math.floor(Number(cfg.reservaTres) || 0)));
+  const totalLugares = maples * 30;
+  const lugaresTres = maples * reservaPorMaple;
+  const lugaresUnoDos = Math.max(0, totalLugares - lugaresTres);
+  const dispUno = aggHoy.extraGrandes || 0;
+  const dispDos = aggHoy.grandes || 0;
+  const dispTres = aggHoy.medianos || 0;
+  const ponerUno = Math.min(dispUno, lugaresUnoDos);
+  const ponerDos = Math.min(dispDos, lugaresUnoDos - ponerUno);
+  const ponerTres = Math.min(dispTres, lugaresTres);
+  const usados = ponerUno + ponerDos + ponerTres;
+  const faltan = Math.max(0, totalLugares - usados);
+  return { maples, reservaPorMaple, totalLugares, lugaresTres, lugaresUnoDos,
+    dispUno, dispDos, dispTres, ponerUno, ponerDos, ponerTres, usados, faltan };
+}
+
 /* ---------- Alertas ---------- */
 function computeAlerts() {
   const alerts = [];
@@ -1274,6 +1301,7 @@ function renderInicio() {
   const aggSemana = agregados(filtrarRango(inicioSemana, hoy));
   const aggMes = agregados(filtrarRango(inicioMes, hoy));
   const rotosPctHoy = aggHoy.total ? (aggHoy.rotos / aggHoy.total) * 100 : 0;
+  const arm = calcularArmadoMaples(aggHoy);
 
   const desde30 = addDays(hoy, -29);
   const regs30 = filtrarRango(desde30, hoy);
@@ -1316,6 +1344,24 @@ function renderInicio() {
     '</section>' +
 
     '<section class="panel">' +
+      '<div class="panel__head"><h3>Armado de maples de hoy</h3></div>' +
+      '<div class="formRow2" style="margin-bottom:10px;">' +
+        '<label class="field"><span>Maples a armar</span><input type="number" min="0" max="999" id="mp_maples" value="' + arm.maples + '"></label>' +
+        '<label class="field"><span>Lugares del 3 por maple</span><input type="number" min="0" max="30" id="mp_reserva" value="' + arm.reservaPorMaple + '"></label>' +
+      '</div>' +
+      (aggHoy.total ? (
+        '<div class="tableWrap"><table class="table"><tbody>' +
+          '<tr><td>Del 1 · Extra grandes</td><td><strong>' + num(arm.ponerUno) + '</strong> <span class="muted">(tenés ' + num(arm.dispUno) + ')</span></td></tr>' +
+          '<tr><td>Del 2 · Grandes</td><td><strong>' + num(arm.ponerDos) + '</strong> <span class="muted">(tenés ' + num(arm.dispDos) + ')</span></td></tr>' +
+          '<tr><td>Del 3 · Medianos</td><td><strong>' + num(arm.ponerTres) + '</strong> <span class="muted">(reservás ' + num(arm.lugaresTres) + ' · tenés ' + num(arm.dispTres) + ')</span></td></tr>' +
+          '<tr><td>Total para ' + num(arm.maples) + ' maples</td><td>' + num(arm.totalLugares) + ' lugares</td></tr>' +
+        '</tbody></table></div>' +
+        (arm.faltan > 0 ? '<p class="modalNote" style="margin-top:8px;color:var(--warn)">Te faltan ' + num(arm.faltan) + ' huevos para llenar los ' + num(arm.maples) + ' maples con la producción de hoy.</p>' : '') +
+        ((arm.dispUno - arm.ponerUno > 0 || arm.dispDos - arm.ponerDos > 0 || arm.dispTres - arm.ponerTres > 0) ? '<p class="modalNote" style="margin-top:6px">Te sobran: ' + num(arm.dispUno - arm.ponerUno) + ' del 1, ' + num(arm.dispDos - arm.ponerDos) + ' del 2 y ' + num(arm.dispTres - arm.ponerTres) + ' del 3.</p>' : '')
+      ) : emptyState('Cargá la producción de hoy para ver el armado.', 'Registrar ahora')) +
+    '</section>' +
+
+    '<section class="panel">' +
       '<div class="panel__head"><h3>Clasificación de hoy</h3></div>' +
       (aggHoy.total ? '<canvas id="chartHoyBarras" height="180"></canvas>' : emptyState('Todavía no cargaste producción hoy.', 'Registrar ahora')) +
     '</section>';
@@ -1323,6 +1369,17 @@ function renderInicio() {
   try { if (aggHoy.total) { drawBarPorTamano('chartHoyBarras', aggHoy); } } catch(chartErr) { console.warn('Chart error:', chartErr); }
 
   el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => setTab(b.getAttribute('data-goto'))));
+
+  const mpM = document.getElementById('mp_maples');
+  const mpR = document.getElementById('mp_reserva');
+  const _updMaples = () => {
+    state.maplesConfig.maples = Math.max(0, Math.floor(Number(mpM.value) || 0));
+    state.maplesConfig.reservaTres = Math.max(0, Math.min(30, Math.floor(Number(mpR.value) || 0)));
+    guardarMaplesConfig();
+    renderInicio();
+  };
+  if (mpM) mpM.addEventListener('change', _updMaples);
+  if (mpR) mpR.addEventListener('change', _updMaples);
 }
 
 function statCard(label, value, sub, tone) {
@@ -2991,6 +3048,8 @@ async function cargarDatos() {
 
   const p = await storeGet('perfil', false);
   if (p) { try { state.perfil = Object.assign(state.perfil, JSON.parse(p)); } catch (e) {} }
+  const mc = await storeGet('maplesConfig', false);
+  if (mc) { try { state.maplesConfig = Object.assign(state.maplesConfig, JSON.parse(mc)); } catch (e) {} }
 
   renderNav();
   setTab('inicio');
