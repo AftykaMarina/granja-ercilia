@@ -142,6 +142,7 @@ p{margin:0;}
 
 /* ============ Stat grid ============ */
 .statGrid{display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:18px;}
+.statGrid > .statCard:last-child:nth-child(odd){grid-column:1 / -1;}
 .statCard{
   background:var(--white); border-radius:15px; padding:14px 15px 15px;
   border:1px solid rgba(200,149,106,0.1); border-left:4px solid var(--ok);
@@ -1498,7 +1499,7 @@ function renderInicio() {
   const ppHist = ppMes === null ? posturaPromedio(null, null, null, gallinasRecuentoReciente()) : null;
   const ppValor = ppMes !== null ? ppMes : ppHist;
   const ppSub = ppMes !== null
-    ? 'promedio del mes' + (picoPostura !== null && Math.abs(picoPostura - ppMes) >= 0.05 ? ' · mejor día ' + pct(picoPostura) : '')
+    ? 'promedio del mes · huevos ÷ gallinas'
     : (ppHist !== null ? 'promedio general · sin registros en ' + fmtMonthLabel(mes) : 'sin registros de producción');
 
   const desde = shiftMes(mes, -5);
@@ -1524,6 +1525,7 @@ function renderInicio() {
       statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
       statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
       statCard('Pico de postura promedio', ppValor === null ? '—' : pct(ppValor), ppSub, ppValor === null ? 'warn' : ppValor >= 80 ? 'ok' : ppValor >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura diario', picoPostura === null ? '—' : pct(picoPostura), picoPostura === null ? 'sin registros en ' + fmtMonthLabel(mes) : 'mejor día: ' + fechaPicoPostura, picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
     '<section class="panel">' +
