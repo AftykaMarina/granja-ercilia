@@ -1464,11 +1464,21 @@ function renderInicio() {
   const mesFin = mesActual ? hoy : ultimoDiaMes(mes);
   const pedidosPendientes = (state.pedidos || []).filter(pd => pd.estado === 'RESERVADO' && (pd.fechaNecesaria || pd.fechaReserva || pd.fecha || '').slice(0,7) === mes).length;
   const regsMes = registrosProduccionMes(mes).filter(x => (x.fecha || '') <= mesFin);
-  const porDia = {};
-  regsMes.forEach(reg => { porDia[reg.fecha] = (porDia[reg.fecha] || 0) + clasificadosRegistro(reg); });
-  const aves = totalGallinas();
-  const picoPostura = aves > 0 && Object.keys(porDia).length
-    ? Math.max(...Object.values(porDia).map(total => total / aves * 100)) : null;
+  // El pico se calcula por galpón, usando las aves del galpón seleccionado
+  // en cada registro. No se divide la producción de un galpón por las aves
+  // de toda la granja ni se mezclan galpones distintos.
+  const huevosPorDiaGalpon = {};
+  regsMes.forEach(reg => {
+    if (!reg.galponId) return;
+    const clave = reg.fecha + '|' + reg.galponId;
+    huevosPorDiaGalpon[clave] = (huevosPorDiaGalpon[clave] || 0) + clasificadosRegistro(reg);
+  });
+  const porcentajesPostura = Object.keys(huevosPorDiaGalpon).map(clave => {
+    const galponId = clave.split('|')[1];
+    const avesGalponRegistro = totalGallinas([galponId]);
+    return avesGalponRegistro > 0 ? huevosPorDiaGalpon[clave] / avesGalponRegistro * 100 : null;
+  }).filter(v => v !== null && Number.isFinite(v));
+  const picoPostura = porcentajesPostura.length ? Math.max(...porcentajesPostura) : null;
 
   const desde = shiftMes(mes, -5);
   const meses = [];
