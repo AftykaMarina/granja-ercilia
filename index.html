@@ -1464,21 +1464,24 @@ function renderInicio() {
   const mesFin = mesActual ? hoy : ultimoDiaMes(mes);
   const pedidosPendientes = (state.pedidos || []).filter(pd => pd.estado === 'RESERVADO' && (pd.fechaNecesaria || pd.fechaReserva || pd.fecha || '').slice(0,7) === mes).length;
   const regsMes = registrosProduccionMes(mes).filter(x => (x.fecha || '') <= mesFin);
-  // El pico se calcula por galpón, usando las aves del galpón seleccionado
-  // en cada registro. No se divide la producción de un galpón por las aves
-  // de toda la granja ni se mezclan galpones distintos.
-  const huevosPorDiaGalpon = {};
+  // Postura diaria: solo se consideran las fechas que tienen registros.
+  // Se cuentan TODOS los huevos recolectados (incluidos rotos y sucios),
+  // porque también representan huevos puestos. Si hay varios registros del
+  // mismo galpón en un día, se suman, pero las aves se cuentan una sola vez.
+  const produccionDiaria = {};
   regsMes.forEach(reg => {
-    if (!reg.galponId) return;
-    const clave = reg.fecha + '|' + reg.galponId;
-    huevosPorDiaGalpon[clave] = (huevosPorDiaGalpon[clave] || 0) + clasificadosRegistro(reg);
+    if (!reg.fecha || !reg.galponId) return;
+    if (!produccionDiaria[reg.fecha]) produccionDiaria[reg.fecha] = { huevos: 0, galpones: new Set() };
+    produccionDiaria[reg.fecha].huevos += totalRegistro(reg);
+    produccionDiaria[reg.fecha].galpones.add(reg.galponId);
   });
-  const porcentajesPostura = Object.keys(huevosPorDiaGalpon).map(clave => {
-    const galponId = clave.split('|')[1];
-    const avesGalponRegistro = totalGallinas([galponId]);
-    return avesGalponRegistro > 0 ? huevosPorDiaGalpon[clave] / avesGalponRegistro * 100 : null;
-  }).filter(v => v !== null && Number.isFinite(v));
-  const picoPostura = porcentajesPostura.length ? Math.max(...porcentajesPostura) : null;
+  const posturasDiarias = Object.entries(produccionDiaria).map(([fecha, dato]) => {
+    const avesRegistradasEseDia = Array.from(dato.galpones).reduce((s, gid) => s + totalGallinas([gid]), 0);
+    return { fecha, porcentaje: avesRegistradasEseDia > 0 ? dato.huevos / avesRegistradasEseDia * 100 : null };
+  }).filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje));
+  const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
+  const picoPostura = picoDiario ? picoDiario.porcentaje : null;
+  const fechaPicoPostura = picoDiario ? fmtDateShort(picoDiario.fecha) : '';
 
   const desde = shiftMes(mes, -5);
   const meses = [];
@@ -1502,7 +1505,7 @@ function renderInicio() {
       statCard('Ingresos por ventas', money(r.ingresos), 'huevos y otros productos', 'ok') +
       statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
       statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
-      statCard('Pico de postura', picoPostura === null ? '—' : pct(picoPostura), 'máximo diario del mes', picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura diario', picoPostura === null ? '—' : pct(picoPostura), picoPostura === null ? 'sin registros de producción' : 'mejor día: ' + fechaPicoPostura, picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
     '<section class="panel">' +
