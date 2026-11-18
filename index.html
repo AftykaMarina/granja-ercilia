@@ -1464,21 +1464,31 @@ function renderInicio() {
   const mesFin = mesActual ? hoy : ultimoDiaMes(mes);
   const pedidosPendientes = (state.pedidos || []).filter(pd => pd.estado === 'RESERVADO' && (pd.fechaNecesaria || pd.fechaReserva || pd.fecha || '').slice(0,7) === mes).length;
   const regsMes = registrosProduccionMes(mes).filter(x => (x.fecha || '') <= mesFin);
-  // Postura diaria: solo se consideran las fechas que tienen registros.
-  // Se cuentan TODOS los huevos recolectados (incluidos rotos y sucios),
-  // porque también representan huevos puestos. Si hay varios registros del
-  // mismo galpón en un día, se suman, pero las aves se cuentan una sola vez.
-  const produccionDiaria = {};
+  // Pico de postura diario: cada galpón aporta un único porcentaje por día.
+  // Si hay más de un registro del mismo galpón en esa fecha, se promedian
+  // las cantidades de huevos de esos registros (NO se suman). Luego se divide
+  // ese promedio por la cantidad de gallinas del galpón.
+  const porDiaGalpon = {};
   regsMes.forEach(reg => {
     if (!reg.fecha || !reg.galponId) return;
-    if (!produccionDiaria[reg.fecha]) produccionDiaria[reg.fecha] = { huevos: 0, galpones: new Set() };
-    produccionDiaria[reg.fecha].huevos += totalRegistro(reg);
-    produccionDiaria[reg.fecha].galpones.add(reg.galponId);
+    const clave = reg.fecha + '|' + reg.galponId;
+    if (!porDiaGalpon[clave]) porDiaGalpon[clave] = { fecha: reg.fecha, galponId: reg.galponId, huevosRegistros: [], cantidadRegistros: 0 };
+    porDiaGalpon[clave].huevosRegistros.push(totalRegistro(reg));
+    porDiaGalpon[clave].cantidadRegistros += 1;
   });
-  const posturasDiarias = Object.entries(produccionDiaria).map(([fecha, dato]) => {
-    const avesRegistradasEseDia = Array.from(dato.galpones).reduce((s, gid) => s + totalGallinas([gid]), 0);
-    return { fecha, porcentaje: avesRegistradasEseDia > 0 ? dato.huevos / avesRegistradasEseDia * 100 : null };
-  }).filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje));
+  const porcentajesPorDia = {};
+  Object.values(porDiaGalpon).forEach(dato => {
+    const aves = totalGallinas([dato.galponId]);
+    if (!aves || !dato.huevosRegistros.length) return;
+    const promedioHuevos = dato.huevosRegistros.reduce((s, n) => s + n, 0) / dato.huevosRegistros.length;
+    const porcentajeGalpon = promedioHuevos / aves * 100;
+    if (!porcentajesPorDia[dato.fecha]) porcentajesPorDia[dato.fecha] = [];
+    porcentajesPorDia[dato.fecha].push(porcentajeGalpon);
+  });
+  // Un solo valor diario: promedio de los porcentajes de los galpones registrados.
+  const posturasDiarias = Object.entries(porcentajesPorDia).map(([fecha, valores]) => ({
+    fecha, porcentaje: valores.reduce((s, n) => s + n, 0) / valores.length
+  })).filter(d => Number.isFinite(d.porcentaje));
   const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
   const picoPostura = picoDiario ? picoDiario.porcentaje : null;
   const fechaPicoPostura = picoDiario ? fmtDateShort(picoDiario.fecha) : '';
