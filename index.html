@@ -3002,16 +3002,6 @@ function renderCaja() {
     }).join('');
   });
 
-  /* --- lista de pedidos entregados del mes --- */
-  const pedidosListaHtml = r.pedidos.length ? r.pedidos.map(pd => {
-    const nm = maplesDePedido(pd);
-    return '<div class="cajaRow">' +
-      '<div class="cajaRow__main"><strong>' + escapeHtml(pd.clienteNombre || 'Pedido') + '</strong>' +
-        '<div class="cajaRow__sub">' + fmtDateShort(fechaIngresoPedido(pd)) + (nm ? ' · ' + (Math.round(nm * 10) / 10) + ' maples' : '') + '</div></div>' +
-      '<div class="cajaRow__monto">' + money(pd.precioTotal) + '</div>' +
-      '<div class="cajaRow__actions"></div></div>';
-  }).join('') : '<div class="muted" style="margin-top:8px">Todavía no hay pedidos entregados en ' + mesLabel + '.</div>';
-
   /* --- simulación de venta diaria --- */
   const maplesDia = Math.max(1, Math.floor(Number(state.maplesConfig.maples) || 7));
   const simIngreso = precioSugerido(maplesDia) * 30;
@@ -3054,10 +3044,11 @@ function renderCaja() {
 
     '<section class="panel">' +
       '<div class="panel__head"><h3>Ventas del mes</h3><span class="chip chip--on" style="flex:none">' + money(r.ingresoPedidos) + '</span></div>' +
-      '<p class="cajaNota" style="margin:0 0 10px">Salen de la pestaña <b>Pedidos</b>: cada pedido que marcaste entregado, con su cliente y su precio. No hay nada que cargar acá.</p>' +
-      '<button class="btn btn--ghost" id="btnIrPedidos" style="margin:4px 0 12px">Ver mis pedidos ›</button>' +
+      '<p class="cajaNota" style="margin:0 0 6px">' + (r.pedidos.length
+        ? 'Suma de <b>' + r.pedidos.length + (r.pedidos.length === 1 ? ' pedido entregado' : ' pedidos entregados') + '</b> en ' + mesLabel + '. Sale solo de la pestaña Pedidos, no hay nada que cargar acá.'
+        : 'Todavía no hay pedidos entregados con precio en ' + mesLabel + '. Sale solo de la pestaña Pedidos.') + '</p>' +
       (r.pedidosSinPrecio.length ? '<p class="cajaNota" style="color:#a0522d">' + r.pedidosSinPrecio.length + (r.pedidosSinPrecio.length === 1 ? ' pedido entregado no tiene precio cargado' : ' pedidos entregados no tienen precio cargado') + ' y no suma en la caja. Abrí ese pedido en Pedidos y poné el total.</p>' : '') +
-      pedidosListaHtml +
+      '<button class="btn btn--ghost" id="btnIrPedidos" style="margin:6px 0 2px">Ir a Pedidos ›</button>' +
     '</section>' +
 
     '<section class="panel">' +
