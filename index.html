@@ -683,10 +683,29 @@ function parseFirebaseConfigInput(text) {
   return null;
 }
 
+let cloudPersistenceEnabled = false;
 async function initCloud(cfg) {
   fbApp = firebase.initializeApp(cfg);
   db = firebase.firestore();
-  await db.collection('galpones').limit(1).get();
+
+  // Mantiene una caché local de Firestore entre aperturas del navegador.
+  // Así se evitan descargas completas innecesarias cuando los datos ya están
+  // almacenados localmente. synchronizeTabs permite compartir la persistencia
+  // entre pestañas del mismo navegador.
+  try {
+    await db.enablePersistence({ synchronizeTabs: true });
+    cloudPersistenceEnabled = true;
+  } catch (e) {
+    // La app sigue funcionando si el navegador no admite persistencia
+    // o si ya hay otra pestaña/controlador usando una configuración incompatible.
+    cloudPersistenceEnabled = false;
+    if (e && !['failed-precondition', 'unimplemented'].includes(e.code)) {
+      console.warn('No se pudo activar la caché persistente de Firestore:', e);
+    }
+  }
+
+  // No hacemos una lectura de prueba aquí: el listener de galpones ya valida
+  // el acceso y esa consulta adicional se cobraba en cada apertura.
   cloudConfig = cfg;
 }
 
