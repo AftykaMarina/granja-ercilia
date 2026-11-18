@@ -521,6 +521,49 @@ h1,h2,h3,h4{color:var(--ink);}
 .toast{background:#173B4D;color:#FFFFFF;box-shadow:0 8px 22px -10px rgba(24,55,71,.3);}
 ::selection{background:#BFE3D0;color:#173B4D;}
 
+/* ============ Caja y rentabilidad ============ */
+.cajaHero{
+  background:
+    radial-gradient(ellipse 80% 70% at 85% -10%, rgba(120,185,154,0.35), transparent 60%),
+    linear-gradient(160deg,#1E4A5C 0%,#173B4D 60%,#122E3C 100%);
+  color:#F0F4F8; border-radius:20px; padding:20px 20px 18px;
+  margin-bottom:15px; box-shadow:0 8px 24px -14px rgba(23,59,77,.55);
+  position:relative; overflow:hidden;
+}
+.cajaHero::after{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.04) 0 2px,transparent 2px 26px);pointer-events:none;}
+.cajaHero__label{font-size:12px; opacity:.78; position:relative; text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
+.cajaHero__big{font-family:'Fraunces',serif; font-size:38px; font-weight:600; line-height:1.05; margin-top:7px; letter-spacing:-0.01em; position:relative;}
+.cajaHero__big.neg{color:#FFC2C2;}
+.cajaHero__big.pos{color:#C7EDD8;}
+.cajaHero__sub{font-size:12px; opacity:.75; margin-top:5px; position:relative;}
+.cajaHero__row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:15px; position:relative;}
+.cajaHero__item{background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.12); border-radius:11px; padding:8px 10px; backdrop-filter:blur(3px);}
+.cajaHero__item span{display:block; font-size:10.5px; opacity:.75;}
+.cajaHero__item strong{display:block; font-family:'Fraunces',serif; font-size:14.5px; font-weight:600; margin-top:2px;}
+.cajaRow{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #E5EEF0;}
+.cajaRow:last-child{border-bottom:none;}
+.cajaRow__main{min-width:0;}
+.cajaRow__main strong{font-size:13.5px; font-weight:600; color:#183747;}
+.cajaRow__sub{font-size:11.5px; color:#647D89; margin-top:2px;}
+.cajaRow__monto{font-family:'Fraunces',serif; font-weight:600; font-size:15px; color:#183747; white-space:nowrap;}
+.cajaRow__actions{display:flex; gap:6px; flex:none;}
+.gastoTag{display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; padding:2px 7px; border-radius:99px; background:#EDF5F7; color:#5B7683; margin-left:5px;}
+.gastoTag--maple{background:#FDF1E4; color:#A9713E;}
+.gastoTag--unico{background:#EDF0FA; color:#5B6BA8;}
+.cajaCatHead{display:flex; justify-content:space-between; align-items:baseline; font-size:11px; color:#647D89; text-transform:uppercase; letter-spacing:.06em; margin:14px 0 1px; font-weight:700;}
+.cajaCatHead b{font-size:12.5px; color:#183747; letter-spacing:0; text-transform:none;}
+.cajaBar{height:6px; border-radius:99px; background:#EDF5F7; overflow:hidden; margin-top:5px;}
+.cajaBar i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#A6D7BE,#78B99A);}
+.cajaGrid{display:grid; grid-template-columns:1fr 1fr; gap:9px;}
+.cajaMini{background:#F7FBFC; border:1px solid #E1EBEE; border-radius:12px; padding:9px 11px;}
+.cajaMini span{display:block; font-size:10.5px; color:#647D89;}
+.cajaMini strong{display:block; font-family:'Fraunces',serif; font-size:16px; font-weight:600; color:#173B4D; margin-top:1px;}
+.cajaNota{font-size:11.5px; color:#647D89; line-height:1.5; margin-top:8px;}
+/* 8 secciones en la barra inferior */
+.navBtn{padding:8px 0; gap:3px;}
+.navIcon svg{width:19px; height:19px;}
+.navLabel{font-size:9.5px; letter-spacing:-0.01em;}
+
 </style>
 </head>
 <body>
@@ -547,6 +590,7 @@ h1,h2,h3,h4{color:var(--ink);}
     <div class="view" id="view-graficos"></div>
     <div class="view" id="view-lotes"></div>
     <div class="view" id="view-pesajes"></div>
+    <div class="view" id="view-caja"></div>
     <div class="view" id="view-reportes"></div>
   </main>
 
@@ -605,10 +649,19 @@ async function guardarStockLocal() {
 async function guardarPesajesLocal() {
   await storeSet('pesajes', JSON.stringify(state.pesajes), true);
 }
+async function guardarGastosLocal() {
+  await storeSet('gastos', JSON.stringify(state.gastos), true);
+}
+async function guardarVentasLocal() {
+  await storeSet('ventas', JSON.stringify(state.ventas), true);
+}
+async function guardarPreciosLocal() {
+  await storeSet('precios', JSON.stringify(state.precios), false);
+}
 
 /* ---------- Sincronización en la nube (Firebase Firestore) ---------- */
 let fbApp = null, db = null, cloudConfig = null;
-let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null, unsubStock = null, unsubPesajes = null;
+let unsubRegistros = null, unsubGalpones = null, unsubPedidos = null, unsubStock = null, unsubPesajes = null, unsubGastos = null, unsubVentas = null;
 
 function loadCloudConfig() {
   try {
@@ -642,6 +695,8 @@ function setupListeners() {
   if (unsubPedidos) unsubPedidos();
   if (unsubStock) unsubStock();
   if (unsubPesajes) unsubPesajes();
+  if (unsubGastos) unsubGastos();
+  if (unsubVentas) unsubVentas();
   unsubRegistros = db.collection('registros').onSnapshot(snap => {
     state.registros = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
@@ -667,6 +722,14 @@ function setupListeners() {
     state.pesajes = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     onDataChanged();
   }, err => { toast('Error de sincronización pesajes: ' + err.message); });
+  unsubGastos = db.collection('gastos').onSnapshot(snap => {
+    state.gastos = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización gastos: ' + err.message); });
+  unsubVentas = db.collection('ventas').onSnapshot(snap => {
+    state.ventas = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    onDataChanged();
+  }, err => { toast('Error de sincronización ventas: ' + err.message); });
 }
 
 function onDataChanged() {
@@ -784,6 +847,54 @@ async function actualizarPedido(id, datos) {
     renderCurrentView();
   }
 }
+/* ---------- Operaciones de gastos y ventas (Caja) ---------- */
+async function crearGasto(g) {
+  if (db) {
+    const data = Object.assign({}, g); const id = data.id; delete data.id;
+    await db.collection('gastos').doc(id).set(data);
+  } else {
+    state.gastos.push(g);
+    await guardarGastosLocal();
+    renderCurrentView();
+  }
+}
+async function actualizarGasto(id, datos) {
+  const idx = state.gastos.findIndex(g => g.id === id);
+  if (idx !== -1) state.gastos[idx] = Object.assign({}, state.gastos[idx], datos);
+  if (db) {
+    await db.collection('gastos').doc(id).set(datos, { merge: true });
+  } else {
+    await guardarGastosLocal();
+  }
+  renderCurrentView();
+}
+async function eliminarGastoPorId(id) {
+  state.gastos = state.gastos.filter(g => g.id !== id);
+  if (db) {
+    await db.collection('gastos').doc(id).delete();
+  } else {
+    await guardarGastosLocal();
+  }
+}
+async function crearVenta(v) {
+  if (db) {
+    const data = Object.assign({}, v); const id = data.id; delete data.id;
+    await db.collection('ventas').doc(id).set(data);
+  } else {
+    state.ventas.push(v);
+    await guardarVentasLocal();
+    renderCurrentView();
+  }
+}
+async function eliminarVentaPorId(id) {
+  state.ventas = state.ventas.filter(v => v.id !== id);
+  if (db) {
+    await db.collection('ventas').doc(id).delete();
+  } else {
+    await guardarVentasLocal();
+  }
+}
+
 /* ---------- Operaciones de stock (nube / local) ---------- */
 async function guardarStock(stk) {
   _stockCache._ts = 0;
@@ -890,9 +1001,9 @@ async function eliminarPedidoPorId(id) {
     renderCurrentView();
   }
 }
-async function restaurarDatos(registros, galpones, pedidos, stockItems, pesajes) {
+async function restaurarDatos(registros, galpones, pedidos, stockItems, pesajes, gastos, ventas) {
   if (db) {
-    const colecciones = ['registros', 'galpones', 'pedidos', 'stock', 'pesajes'];
+    const colecciones = ['registros', 'galpones', 'pedidos', 'stock', 'pesajes', 'gastos', 'ventas'];
     for (const nombre of colecciones) {
       const snap = await db.collection(nombre).get();
       let batch = db.batch(); let count = 0;
@@ -929,6 +1040,16 @@ async function restaurarDatos(registros, galpones, pedidos, stockItems, pesajes)
       batch.set(db.collection('pesajes').doc(id), data); count++;
       if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
     }
+    for (const gt of (gastos || [])) {
+      const data = Object.assign({}, gt); const id = data.id; delete data.id;
+      batch.set(db.collection('gastos').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
+    for (const vn of (ventas || [])) {
+      const data = Object.assign({}, vn); const id = data.id; delete data.id;
+      batch.set(db.collection('ventas').doc(id), data); count++;
+      if (count === 450) { await batch.commit(); batch = db.batch(); count = 0; }
+    }
     if (count) await batch.commit();
   } else {
     state.registros = registros;
@@ -936,11 +1057,15 @@ async function restaurarDatos(registros, galpones, pedidos, stockItems, pesajes)
     state.pedidos = pedidos || [];
     state.stock = stockItems || [];
     state.pesajes = pesajes || [];
+    state.gastos = gastos || [];
+    state.ventas = ventas || [];
     await guardarRegistrosLocal();
     await guardarGalponesLocal();
     await guardarPedidosLocal();
     await guardarStockLocal();
     await guardarPesajesLocal();
+    await guardarGastosLocal();
+    await guardarVentasLocal();
   }
 }
 
@@ -951,8 +1076,12 @@ const state = {
   pedidos: [],
   stock: [],
   pesajes: [],
+  gastos: [],
+  ventas: [],
   perfil: { rol: 'Administrador', nombre: '' },
   maplesConfig: { maples: 7, reservaTres: 4 },
+  precios: { uno: 9000, dos: 17000, tresMas: 8000 },
+  cajaMes: null,
   activeTab: 'inicio',
   charts: {},
   reportRange: { desde: null, hasta: null }
@@ -1241,7 +1370,8 @@ const ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16L12 21L3 16V8L12 3L21 8Z"/><path d="M12 12L21 8"/><path d="M12 12V21"/><path d="M12 12L3 8"/></svg>',
   scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v17"/><path d="M7 20h10"/><path d="M4.5 7h15"/><path d="M12 3.1a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"/><path d="M4.5 7 2 13h5L4.5 7Z"/><path d="M19.5 7 17 13h5l-2.5-6Z"/></svg>',
-  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>'
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>',
+  coin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.7c-.5-.8-1.6-1.3-3-1.3-1.8 0-3 .9-3 2.1 0 3 6 1.5 6 4.2 0 1.2-1.3 2.1-3 2.1-1.5 0-2.7-.6-3.1-1.5"/><path d="M12 6v2M12 16v2"/></svg>'
 };
 
 /* ---------- Render: shell / navegación ---------- */
@@ -1252,6 +1382,7 @@ const TABS = [
   { id: 'graficos', label: 'Gráficos', icon: 'chart' },
   { id: 'lotes', label: 'Galpones', icon: 'barn' },
   { id: 'pesajes', label: 'Pesajes', icon: 'scale' },
+  { id: 'caja', label: 'Caja', icon: 'coin' },
   { id: 'reportes', label: 'Reportes', icon: 'doc' }
 ];
 
@@ -1305,6 +1436,7 @@ function renderCurrentView() {
     else if (state.activeTab === 'graficos') renderGraficos();
     else if (state.activeTab === 'lotes') renderLotes();
     else if (state.activeTab === 'pesajes') renderPesajes();
+    else if (state.activeTab === 'caja') renderCaja();
     else if (state.activeTab === 'reportes') renderReportes();
   } catch(e) {
     console.error('renderCurrentView error:', e);
@@ -2743,6 +2875,463 @@ function pedidoCard(pd, perms) {
   '</div>';
 }
 
+/* ---------- Caja y rentabilidad ---------- */
+const CATEGORIAS_GASTO = ['Alimento', 'Sanidad', 'Envases', 'Operativos', 'Mano de obra', 'Impuestos', 'Otros'];
+const TIPO_GASTO_LABEL = { MENSUAL: 'Todos los meses', UNICO: 'Solo este mes', MAPLE: 'Por maple' };
+
+function money(n) { return '$ ' + num(Math.round(Number(n) || 0)); }
+function mesActualKey() { return todayStr().slice(0, 7); }
+function shiftMes(mes, delta) {
+  const partes = mes.split('-').map(Number);
+  const d = new Date(partes[0], partes[1] - 1 + delta, 1);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+}
+function ultimoDiaMes(mes) {
+  const p = mes.split('-').map(Number);
+  const d = new Date(p[0], p[1], 0);
+  return mes + '-' + pad2(d.getDate());
+}
+function fechaIngresoPedido(pd) { return pd.fechaEntrega || pd.fechaPago || pd.fechaNecesaria || pd.fechaReserva || ''; }
+function maplesDePedido(pd) {
+  if (pd.producto !== 'HUEVOS') return 0;
+  if (pd.presentacion === 'MAPLE') return Number(pd.cantidadPresentacion) || 0;
+  return (Number(pd.cantidadUnidadesBase) || 0) / 30;
+}
+function precioSugerido(maples) {
+  const p = state.precios || { uno: 9000, dos: 17000, tresMas: 8000 };
+  const n = Math.max(1, Math.floor(Number(maples) || 0));
+  if (n === 1) return Number(p.uno) || 0;
+  if (n === 2) return Number(p.dos) || 0;
+  return n * (Number(p.tresMas) || 0);
+}
+function maplesProducidosMes(mes) {
+  const regs = state.registros.filter(r => (r.fecha || '').indexOf(mes) === 0);
+  return regs.reduce((s, r) => s + totalRegistro(r), 0) / 30;
+}
+function resumenCaja(mes) {
+  const ventas = (state.ventas || []).filter(v => (v.fecha || '').indexOf(mes) === 0);
+  const pedidos = (state.pedidos || []).filter(pd => pd.estado === 'ENTREGADO' && fechaIngresoPedido(pd).indexOf(mes) === 0 && Number(pd.precioTotal) > 0);
+  const ingresoVentas = ventas.reduce((s, v) => s + (Number(v.precioTotal) || 0), 0);
+  const ingresoPedidos = pedidos.reduce((s, pd) => s + (Number(pd.precioTotal) || 0), 0);
+  const maplesVentas = ventas.reduce((s, v) => s + (Number(v.maples) || 0), 0);
+  const maplesPedidos = pedidos.reduce((s, pd) => s + maplesDePedido(pd), 0);
+  const maplesVendidos = maplesVentas + maplesPedidos;
+  const producidos = maplesProducidosMes(mes);
+  const baseMaple = maplesVendidos > 0 ? maplesVendidos : producidos;
+  const gastosMes = (state.gastos || []).filter(g => {
+    const gm = (g.fecha || '').slice(0, 7);
+    if (!gm) return false;
+    return g.tipo === 'UNICO' ? gm === mes : gm <= mes;
+  });
+  let gastosFijosMes = 0, gastosVariableUnit = 0;
+  gastosMes.forEach(g => {
+    const monto = Number(g.monto) || 0;
+    if (g.tipo === 'MAPLE') gastosVariableUnit += monto;
+    else gastosFijosMes += monto;
+  });
+  /* Si el mes está en curso, contamos la parte de los gastos fijos de los días transcurridos */
+  const partes = mes.split('-').map(Number);
+  const diasMes = new Date(partes[0], partes[1], 0).getDate();
+  const esMesEnCurso = mes === mesActualKey();
+  const diasTranscurridos = esMesEnCurso ? new Date().getDate() : diasMes;
+  const factorDias = esMesEnCurso ? Math.min(1, diasTranscurridos / diasMes) : 1;
+  const gastosFijos = gastosFijosMes * factorDias;
+  const gastosVariable = gastosVariableUnit * baseMaple;
+  const gastosTotal = gastosFijos + gastosVariable;
+  const gastosCargadosMes = gastosFijosMes + gastosVariable;
+  const ingresos = ingresoVentas + ingresoPedidos;
+  const ganancia = ingresos - gastosTotal;
+  const costoMaple = (baseMaple > 0 && gastosTotal > 0) ? gastosTotal / baseMaple : null;
+  const precioProm = maplesVendidos > 0 ? ingresos / maplesVendidos : null;
+  const gananciaMaple = (costoMaple !== null && precioProm !== null) ? precioProm - costoMaple : null;
+  const margen = (ingresos > 0 && gastosTotal > 0) ? (ganancia / ingresos) * 100 : null;
+  return { mes: mes, ventas: ventas, pedidos: pedidos, ingresoVentas: ingresoVentas, ingresoPedidos: ingresoPedidos,
+    ingresos: ingresos, maplesVentas: maplesVentas, maplesPedidos: maplesPedidos, maplesVendidos: maplesVendidos,
+    producidos: producidos, baseMaple: baseMaple, gastosMes: gastosMes, gastosFijos: gastosFijos,
+    gastosFijosMes: gastosFijosMes, gastosVariableUnit: gastosVariableUnit, gastosVariable: gastosVariable,
+    gastosTotal: gastosTotal, gastosCargadosMes: gastosCargadosMes, diasMes: diasMes,
+    diasTranscurridos: diasTranscurridos, esMesEnCurso: esMesEnCurso, factorDias: factorDias,
+    ganancia: ganancia, costoMaple: costoMaple, precioProm: precioProm, gananciaMaple: gananciaMaple, margen: margen };
+}
+
+function renderCaja() {
+  const el = document.getElementById('view-caja');
+  if (!el) return;
+  const mes = state.cajaMes || mesActualKey();
+  state.cajaMes = mes;
+  const r = resumenCaja(mes);
+  const p = state.precios || { uno: 9000, dos: 17000, tresMas: 8000 };
+  const mesLabel = fmtMonthLabel(mes);
+  const esMesActual = mes === mesActualKey();
+  const hayDatos = r.ingresos > 0 || r.gastosTotal > 0;
+
+  /* --- lista de gastos agrupada por categoría --- */
+  const cats = [];
+  r.gastosMes.forEach(g => {
+    const c = g.categoria || 'Otros';
+    if (cats.indexOf(c) === -1) cats.push(c);
+  });
+  cats.sort((a, b) => {
+    const ia = CATEGORIAS_GASTO.indexOf(a); const ib = CATEGORIAS_GASTO.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  let gastosHtml = '';
+  cats.forEach(c => {
+    const items = r.gastosMes.filter(g => (g.categoria || 'Otros') === c);
+    const subtotal = items.reduce((s, g) => s + (g.tipo === 'MAPLE' ? (Number(g.monto) || 0) * r.baseMaple : (Number(g.monto) || 0)), 0);
+    gastosHtml += '<div class="cajaCatHead"><span>' + escapeHtml(c) + '</span><b>' + money(subtotal) + '</b></div>';
+    gastosHtml += items.map(g => {
+      const gm = (g.fecha || '').slice(0, 7);
+      const monto = g.tipo === 'MAPLE' ? (Number(g.monto) || 0) * r.baseMaple : (Number(g.monto) || 0);
+      let sub = '';
+      if (g.tipo === 'MAPLE') sub = money(g.monto) + ' por maple × ' + (Math.round(r.baseMaple * 10) / 10) + ' maples';
+      else if (g.tipo === 'UNICO') sub = 'Solo ' + fmtMonthLabel(gm);
+      else sub = 'Todos los meses desde ' + fmtMonthLabel(gm);
+      const tag = g.tipo === 'MAPLE' ? '<span class="gastoTag gastoTag--maple">Por maple</span>' : g.tipo === 'UNICO' ? '<span class="gastoTag gastoTag--unico">Solo este mes</span>' : '<span class="gastoTag">Mensual</span>';
+      return '<div class="cajaRow">' +
+        '<div class="cajaRow__main"><strong>' + escapeHtml(g.descripcion || '-') + '</strong>' + tag +
+          '<div class="cajaRow__sub">' + sub + '</div></div>' +
+        '<div class="cajaRow__monto">' + money(monto) + '</div>' +
+        '<div class="cajaRow__actions">' +
+          '<button class="iconBtn iconBtn--edit" data-editg="' + g.id + '" aria-label="Editar gasto">' + ICONS.pencil + '</button>' +
+          '<button class="iconBtn iconBtn--danger" data-delg="' + g.id + '" aria-label="Eliminar gasto">' + ICONS.trash + '</button>' +
+        '</div></div>';
+    }).join('');
+  });
+
+  /* --- lista de ventas del mes --- */
+  const ventasOrden = r.ventas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  let ventasHtml = ventasOrden.map(v => {
+    const nm = Number(v.maples) || 0;
+    const tot = Number(v.precioTotal) || 0;
+    const unit = nm > 0 ? tot / nm : 0;
+    return '<div class="cajaRow">' +
+      '<div class="cajaRow__main"><strong>' + fmtDateShort(v.fecha) + ' · ' + (Math.round(nm * 10) / 10) + ' maples</strong>' +
+        '<div class="cajaRow__sub">' + money(unit) + ' por maple' + (v.cliente ? ' · ' + escapeHtml(v.cliente) : '') + '</div></div>' +
+      '<div class="cajaRow__monto">' + money(tot) + '</div>' +
+      '<div class="cajaRow__actions"><button class="iconBtn iconBtn--danger" data-delv="' + v.id + '" aria-label="Eliminar venta">' + ICONS.trash + '</button></div>' +
+    '</div>';
+  }).join('');
+  if (r.pedidos.length) {
+    ventasHtml += r.pedidos.map(pd => {
+      const nm = maplesDePedido(pd);
+      return '<div class="cajaRow">' +
+        '<div class="cajaRow__main"><strong>' + escapeHtml(pd.clienteNombre || 'Pedido') + '</strong> <span class="gastoTag gastoTag--unico">Pedido entregado</span>' +
+          '<div class="cajaRow__sub">' + fmtDateShort(fechaIngresoPedido(pd)) + (nm ? ' · ' + (Math.round(nm * 10) / 10) + ' maples' : '') + '</div></div>' +
+        '<div class="cajaRow__monto">' + money(pd.precioTotal) + '</div>' +
+        '<div class="cajaRow__actions"></div></div>';
+    }).join('');
+  }
+
+  /* --- simulación de venta diaria --- */
+  const maplesDia = Math.max(1, Math.floor(Number(state.maplesConfig.maples) || 7));
+  const simIngreso = precioSugerido(maplesDia) * 30;
+  const simGastos = r.gastosFijosMes + r.gastosVariableUnit * maplesDia * 30;
+  const simGanancia = simIngreso - simGastos;
+  const simHayGastos = (r.gastosFijosMes + r.gastosVariableUnit) > 0;
+
+  el.innerHTML =
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Mes de la caja</h3></div>' +
+      '<div style="display:flex;gap:8px;align-items:flex-end">' +
+        '<label class="field" style="flex:1;margin:0"><span>Mes</span><input type="month" id="cj_mes" value="' + mes + '"></label>' +
+        '<button class="btn btn--ghost" id="cjPrev" style="flex:none;width:46px" aria-label="Mes anterior">‹</button>' +
+        '<button class="btn btn--ghost" id="cjNext" style="flex:none;width:46px" aria-label="Mes siguiente"' + (esMesActual ? ' disabled' : '') + '>›</button>' +
+      '</div>' +
+    '</section>' +
+
+    '<section class="cajaHero">' +
+      '<div class="cajaHero__label">Ganancia de ' + mesLabel + '</div>' +
+      '<div class="cajaHero__big ' + (r.ganancia >= 0 ? 'pos' : 'neg') + '">' + (hayDatos ? money(r.ganancia) : '$ 0') + '</div>' +
+      '<div class="cajaHero__sub">' + (hayDatos ? 'Margen real: ' + (r.margen !== null ? pct(r.margen) : '—') : 'Cargá tus ventas y gastos para ver la ganancia real') + '</div>' +
+      '<div class="cajaHero__row">' +
+        '<div class="cajaHero__item"><span>Ingresos</span><strong>' + money(r.ingresos) + '</strong></div>' +
+        '<div class="cajaHero__item"><span>Gastos</span><strong>' + money(r.gastosTotal) + '</strong></div>' +
+        '<div class="cajaHero__item"><span>Costo x maple</span><strong>' + (r.costoMaple !== null ? money(r.costoMaple) : '—') + '</strong></div>' +
+      '</div>' +
+      (r.factorDias < 1 && r.gastosFijosMes > 0 ? '<div class="cajaHero__sub" style="margin-top:10px;line-height:1.5">Mes en curso: de los gastos fijos contamos ' + r.diasTranscurridos + ' de ' + r.diasMes + ' días. Al terminar el mes se cuenta el total.</div>' : '') +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Números del mes</h3></div>' +
+      '<div class="cajaGrid">' +
+        '<div class="cajaMini"><span>Maples vendidos</span><strong>' + (Math.round(r.maplesVendidos * 10) / 10) + '</strong></div>' +
+        '<div class="cajaMini"><span>Maples producidos</span><strong>' + (Math.round(r.producidos * 10) / 10) + '</strong></div>' +
+        '<div class="cajaMini"><span>Precio promedio</span><strong>' + (r.precioProm !== null ? money(r.precioProm) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia por maple</span><strong>' + (r.gananciaMaple !== null ? money(r.gananciaMaple) : '—') + '</strong></div>' +
+      '</div>' +
+      '<p class="cajaNota">' + (r.maplesVendidos > 0 ? 'El costo por maple usa los ' + (Math.round(r.maplesVendidos * 10) / 10) + ' maples vendidos del mes.' : (r.producidos > 0 ? 'Todavía no cargaste ventas: el costo por maple se calcula sobre los ' + (Math.round(r.producidos * 10) / 10) + ' maples producidos.' : 'Cargá una venta o un registro de producción para calcular el costo por maple.')) + (r.factorDias < 1 && r.gastosTotal > 0 ? ' Los gastos fijos se cuentan por los ' + r.diasTranscurridos + ' días que van del mes.' : '') + '</p>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Ingresos por ventas</h3></div>' +
+      '<div class="cajaGrid" style="margin-bottom:12px">' +
+        '<div class="cajaMini"><span>Ventas cargadas</span><strong>' + money(r.ingresoVentas) + '</strong></div>' +
+        '<div class="cajaMini"><span>Pedidos entregados</span><strong>' + money(r.ingresoPedidos) + '</strong></div>' +
+      '</div>' +
+      '<form id="formVenta" class="form">' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Fecha</span><input type="date" id="cv_fecha" value="' + (esMesActual ? todayStr() : ultimoDiaMes(mes)) + '"></label>' +
+          '<label class="field"><span>Maples vendidos</span><input type="number" min="1" step="1" id="cv_maples" value="1"></label>' +
+        '</div>' +
+        '<div class="formRow2">' +
+          '<label class="field"><span>Total cobrado ($)</span><input type="number" min="0" step="1" id="cv_total" value="' + precioSugerido(1) + '"></label>' +
+          '<label class="field"><span>Cliente (opcional)</span><input type="text" id="cv_cliente" placeholder="Ej: almacén"></label>' +
+        '</div>' +
+        '<p class="cajaNota" id="cv_hint">1 maple = ' + money(p.uno) + '</p>' +
+        '<button type="submit" class="btn btn--primary">Registrar venta</button>' +
+      '</form>' +
+      (ventasHtml ? ventasHtml : '<div class="muted" style="margin-top:10px">Todavía no hay ventas cargadas en ' + mesLabel + '.</div>') +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Gastos del mes</h3><span class="chip chip--on" style="flex:none">' + money(r.gastosCargadosMes) + '</span></div>' +
+      '<div class="cajaGrid" style="margin-bottom:6px">' +
+        '<div class="cajaMini"><span>Gastos sin envases</span><strong>' + money(r.gastosFijosMes) + '</strong></div>' +
+        '<div class="cajaMini"><span>Envases del mes</span><strong>' + money(r.gastosVariable) + '</strong></div>' +
+      '</div>' +
+      (r.factorDias < 1 && r.gastosFijosMes > 0 ? '<p class="cajaNota">Los montos de la lista son por mes completo. En las cuentas de arriba contamos ' + r.diasTranscurridos + ' de ' + r.diasMes + ' días (' + money(r.gastosFijos) + ').</p>' : '') +
+      (gastosHtml || emptyState('Todavía no cargaste gastos. Podés empezar con los de tu planilla.', null)) +
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' +
+        '<button class="btn btn--primary" id="btnNuevoGasto" style="flex:1">+ Nuevo gasto</button>' +
+        '<button class="btn btn--ghost" id="btnGastosPlanilla" style="flex:1">Cargar planilla</button>' +
+      '</div>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Precios de venta</h3></div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>1 maple</span><input type="number" min="0" step="100" id="pr_uno" value="' + (Number(p.uno) || 0) + '"></label>' +
+        '<label class="field"><span>2 maples (total)</span><input type="number" min="0" step="100" id="pr_dos" value="' + (Number(p.dos) || 0) + '"></label>' +
+      '</div>' +
+      '<label class="field"><span>3 o más (por maple)</span><input type="number" min="0" step="100" id="pr_tres" value="' + (Number(p.tresMas) || 0) + '"></label>' +
+      '<button class="btn btn--secondary" id="btnGuardarPrecios">Guardar precios</button>' +
+      '<p class="cajaNota">Ejemplo: 7 maples = ' + money(precioSugerido(7)) + ' (' + money((Number(p.tresMas) || 0)) + ' c/u).</p>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Si vendés todos los días</h3></div>' +
+      '<label class="field"><span>Maples por día</span><input type="number" min="1" step="1" id="sim_maples" value="' + maplesDia + '"></label>' +
+      '<div class="cajaGrid">' +
+        '<div class="cajaMini"><span>Ingreso estimado / mes</span><strong id="sim_ing">' + money(simIngreso) + '</strong></div>' +
+        '<div class="cajaMini"><span>Gastos estimados / mes</span><strong id="sim_gas">' + (simHayGastos ? money(simGastos) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia estimada / mes</span><strong id="sim_gan">' + (simHayGastos ? money(simGanancia) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia por maple</span><strong id="sim_gpm">' + (simHayGastos ? money(simGanancia / (maplesDia * 30)) : '—') + '</strong></div>' +
+      '</div>' +
+      '<p class="cajaNota">' + (simHayGastos ? 'Estimado a 30 días, con los gastos cargados en ' + mesLabel + '. Si cargás más gastos, el número se ajusta solo.' : 'Cargá primero tus gastos para ver la ganancia estimada.') + '</p>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Últimos 6 meses</h3></div>' +
+      (hayDatos || resumenCaja(shiftMes(mes, -1)).ingresos > 0 || resumenCaja(shiftMes(mes, -1)).gastosTotal > 0
+        ? '<canvas id="chartCaja" height="220"></canvas>'
+        : emptyState('Cuando cargues ventas y gastos vas a ver acá la comparación mes a mes.', null)) +
+    '</section>';
+
+  /* --- eventos --- */
+  document.getElementById('cj_mes').addEventListener('change', (e) => {
+    if (e.target.value) { state.cajaMes = e.target.value; renderCaja(); }
+  });
+  document.getElementById('cjPrev').addEventListener('click', () => { state.cajaMes = shiftMes(mes, -1); renderCaja(); });
+  const btnNext = document.getElementById('cjNext');
+  if (btnNext) btnNext.addEventListener('click', () => { state.cajaMes = shiftMes(mes, 1); renderCaja(); });
+
+  const inpMaples = document.getElementById('cv_maples');
+  const inpTotal = document.getElementById('cv_total');
+  const hint = document.getElementById('cv_hint');
+  const actualizarPrecio = () => {
+    const m = Math.max(1, Math.floor(Number(inpMaples.value) || 0));
+    const sug = precioSugerido(m);
+    inpTotal.value = sug;
+    const unit = m > 0 ? sug / m : 0;
+    hint.textContent = m === 1 ? '1 maple = ' + money(sug) : m === 2 ? '2 maples = ' + money(sug) + ' (' + money(unit) + ' c/u)' : m + ' maples = ' + money(sug) + ' (' + money(unit) + ' c/u)';
+  };
+  inpMaples.addEventListener('input', actualizarPrecio);
+
+  document.getElementById('formVenta').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const maples = Number(inpMaples.value) || 0;
+    const total = Number(inpTotal.value) || 0;
+    if (maples < 1) { toast('Poné cuántos maples vendiste.'); return; }
+    if (total <= 0) { toast('Poné el total cobrado.'); return; }
+    const venta = {
+      id: 'vn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      fecha: document.getElementById('cv_fecha').value || (esMesActual ? todayStr() : ultimoDiaMes(mes)),
+      maples: maples,
+      precioTotal: total,
+      cliente: document.getElementById('cv_cliente').value.trim(),
+      usuario: state.perfil.nombre || '',
+      creadoEn: new Date().toISOString()
+    };
+    try { await crearVenta(venta); toast('Venta registrada \u2713'); }
+    catch (err) { toast('No se pudo guardar: ' + err.message); }
+  });
+
+  el.querySelectorAll('[data-delv]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('\u00bfBorrar esta venta?')) return;
+    try { await eliminarVentaPorId(btn.getAttribute('data-delv')); toast('Venta eliminada'); renderCaja(); }
+    catch (err) { toast('No se pudo borrar: ' + err.message); }
+  }));
+
+  document.getElementById('btnNuevoGasto').addEventListener('click', () => abrirGastoModal(null));
+  document.getElementById('btnGastosPlanilla').addEventListener('click', cargarGastosPlanilla);
+  el.querySelectorAll('[data-editg]').forEach(btn => btn.addEventListener('click', () => abrirGastoModal(btn.getAttribute('data-editg'))));
+  el.querySelectorAll('[data-delg]').forEach(btn => btn.addEventListener('click', async () => {
+    const id = btn.getAttribute('data-delg');
+    if (!confirm('\u00bfBorrar este gasto?')) return;
+    try { await eliminarGastoPorId(id); toast('Gasto eliminado'); renderCaja(); }
+    catch (err) { toast('No se pudo borrar: ' + err.message); }
+  }));
+
+  const simInp = document.getElementById('sim_maples');
+  simInp.addEventListener('input', () => {
+    if (!simHayGastos) return;
+    const n = Math.max(1, Math.floor(Number(simInp.value) || 0));
+    const ing = precioSugerido(n) * 30;
+    const gas = r.gastosFijosMes + r.gastosVariableUnit * n * 30;
+    document.getElementById('sim_ing').textContent = money(ing);
+    document.getElementById('sim_gas').textContent = money(gas);
+    document.getElementById('sim_gan').textContent = money(ing - gas);
+    document.getElementById('sim_gpm').textContent = money((ing - gas) / (n * 30));
+  });
+
+  document.getElementById('btnGuardarPrecios').addEventListener('click', async () => {
+    state.precios = {
+      uno: Number(document.getElementById('pr_uno').value) || 0,
+      dos: Number(document.getElementById('pr_dos').value) || 0,
+      tresMas: Number(document.getElementById('pr_tres').value) || 0
+    };
+    await guardarPreciosLocal();
+    toast('Precios guardados \u2713');
+    renderCaja();
+  });
+
+  if (document.getElementById('chartCaja')) drawCajaChart(mes);
+}
+
+function abrirGastoModal(id) {
+  const g = id ? (state.gastos || []).find(x => x.id === id) : null;
+  const mes = state.cajaMes || mesActualKey();
+  const fecha = g ? (g.fecha || mes + '-01') : (mes === mesActualKey() ? todayStr() : mes + '-01');
+  const modal = document.getElementById('modalEditar');
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>' + (g ? 'Editar gasto' : 'Nuevo gasto') + '</h3><button class="iconBtn" id="cerrarGasto">' + ICONS.x + '</button></div>' +
+      '<form id="formGasto" class="form">' +
+        '<label class="field"><span>Categoría</span><select id="gt_cat">' +
+          CATEGORIAS_GASTO.map(c => '<option value="' + c + '"' + (g && g.categoria === c ? ' selected' : '') + '>' + c + '</option>').join('') +
+        '</select></label>' +
+        '<label class="field"><span>Descripción</span><input type="text" id="gt_desc" placeholder="Ej: Alimento balanceado" value="' + escapeHtml(g ? (g.descripcion || '') : '') + '" required></label>' +
+        '<label class="field"><span>Monto ($)</span><input type="number" min="0" step="1" id="gt_monto" value="' + (g ? (Number(g.monto) || 0) : '') + '" required></label>' +
+        '<label class="field"><span>¿Cómo se repite?</span><select id="gt_tipo">' +
+          '<option value="MENSUAL"' + (g && g.tipo === 'MENSUAL' ? ' selected' : '') + '>Todos los meses (fijo)</option>' +
+          '<option value="UNICO"' + (g && g.tipo === 'UNICO' ? ' selected' : '') + '>Solo este mes</option>' +
+          '<option value="MAPLE"' + (g && g.tipo === 'MAPLE' ? ' selected' : '') + '>Por cada maple vendido</option>' +
+        '</select></label>' +
+        '<label class="field"><span id="gt_fechaLbl">' + (g && g.tipo === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes') + '</span><input type="date" id="gt_fecha" value="' + fecha + '"></label>' +
+        '<p class="cajaNota" id="gt_hint"></p>' +
+        '<button type="submit" class="btn btn--primary">' + (g ? 'Guardar cambios' : 'Agregar gasto') + '</button>' +
+      '</form>' +
+    '</div>';
+  modal.classList.add('modal--open');
+  document.getElementById('cerrarGasto').addEventListener('click', () => modal.classList.remove('modal--open'));
+
+  const hint = document.getElementById('gt_hint');
+  const tipoSel = document.getElementById('gt_tipo');
+  const actualizarHint = () => {
+    const t = tipoSel.value;
+    document.getElementById('gt_fechaLbl').textContent = t === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes';
+    hint.textContent = t === 'MAPLE'
+      ? 'Poné cuánto cuesta por cada maple (por ejemplo, envases). Se multiplica por los maples vendidos.'
+      : t === 'UNICO'
+        ? 'Se cuenta solo en el mes de esa fecha (por ejemplo, una reparación).'
+        : 'Se cuenta todos los meses desde esa fecha, sin volver a cargarlo.';
+  };
+  tipoSel.addEventListener('change', actualizarHint);
+  actualizarHint();
+
+  document.getElementById('formGasto').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const descripcion = document.getElementById('gt_desc').value.trim();
+    const monto = Number(document.getElementById('gt_monto').value) || 0;
+    if (!descripcion) { toast('Poné una descripción.'); return; }
+    if (monto <= 0) { toast('Poné un monto mayor a cero.'); return; }
+    const datos = {
+      categoria: document.getElementById('gt_cat').value,
+      descripcion: descripcion,
+      monto: monto,
+      tipo: tipoSel.value,
+      fecha: document.getElementById('gt_fecha').value || mes + '-01'
+    };
+    try {
+      if (g) { await actualizarGasto(g.id, datos); toast('Gasto actualizado \u2713'); }
+      else {
+        datos.id = 'gt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        datos.creadoEn = new Date().toISOString();
+        datos.usuario = state.perfil.nombre || '';
+        await crearGasto(datos);
+        toast('Gasto agregado \u2713');
+      }
+      modal.classList.remove('modal--open');
+      renderCaja();
+    } catch (err) { toast('No se pudo guardar: ' + err.message); }
+  });
+}
+
+async function cargarGastosPlanilla() {
+  const mes = state.cajaMes || mesActualKey();
+  const yaCargados = (state.gastos || []).some(g => g.sugerido);
+  if (yaCargados && !confirm('Ya cargaste los gastos de la planilla antes. ¿Querés volver a cargarlos?')) return;
+  if (!yaCargados && !confirm('Se van a cargar 4 gastos de tu planilla (alimento, sanidad, operativos y envases por maple). Después podés editarlos o borrarlos. ¿Seguimos?')) return;
+  const sugeridos = [
+    { categoria: 'Alimento', descripcion: 'Alimento + conchilla + suplemento', monto: 641677, tipo: 'MENSUAL' },
+    { categoria: 'Sanidad', descripcion: 'Sanidad: veterinaria, vinagre, probióticos, antiparasitario', monto: 190000, tipo: 'MENSUAL' },
+    { categoria: 'Operativos', descripcion: 'Viruta, luz, mantenimiento y nafta', monto: 361000, tipo: 'MENSUAL' },
+    { categoria: 'Envases', descripcion: 'Maples, film, etiquetas, sellos y bolsitas', monto: 464, tipo: 'MAPLE' }
+  ];
+  try {
+    for (const s of sugeridos) {
+      await crearGasto({
+        id: 'gt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        categoria: s.categoria, descripcion: s.descripcion, monto: s.monto, tipo: s.tipo,
+        fecha: mes + '-01', sugerido: true, creadoEn: new Date().toISOString(), usuario: state.perfil.nombre || ''
+      });
+    }
+    toast('Gastos de la planilla cargados \u2713');
+    renderCaja();
+  } catch (err) { toast('No se pudieron cargar: ' + err.message); }
+}
+
+function drawCajaChart(mes) {
+  const canvas = document.getElementById('chartCaja');
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart('chartCaja');
+  const meses = [];
+  for (let i = 5; i >= 0; i--) meses.push(shiftMes(mes, -i));
+  const datos = meses.map(m => resumenCaja(m));
+  state.charts['chartCaja'] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: meses.map(m => fmtMonthLabel(m)),
+      datasets: [
+        { label: 'Ingresos', data: datos.map(d => Math.round(d.ingresos)), backgroundColor: 'rgba(120,185,154,0.85)', borderRadius: 5, maxBarThickness: 22 },
+        { label: 'Gastos', data: datos.map(d => Math.round(d.gastosTotal)), backgroundColor: 'rgba(217,119,131,0.75)', borderRadius: 5, maxBarThickness: 22 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#647D89', font: baseFont(), boxWidth: 10, boxHeight: 10 } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + money(c.parsed.y) } }
+      },
+      scales: {
+        x: { ticks: { font: baseFont(), color: '#647D89' }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { font: baseFont(), color: '#647D89', callback: v => '$' + num(v) }, grid: { color: '#E5EEF0' } }
+      }
+    }
+  });
+}
+
 /* ---------- Render: Reportes ---------- */
 function renderReportes() {
   const el = document.getElementById('view-reportes');
@@ -3191,7 +3780,7 @@ function renderPerfilModal() {
     cerrarPerfil();
   });
   document.getElementById('btnExportarRespaldo').addEventListener('click', () => {
-    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, stock: state.stock, pesajes: state.pesajes, exportadoEn: new Date().toISOString() }, null, 2);
+    const data = JSON.stringify({ registros: state.registros, galpones: state.galpones, pedidos: state.pedidos, stock: state.stock, pesajes: state.pesajes, gastos: state.gastos, ventas: state.ventas, exportadoEn: new Date().toISOString() }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -3205,7 +3794,7 @@ function renderPerfilModal() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (Array.isArray(data.registros) && Array.isArray(data.galpones)) {
-        await restaurarDatos(data.registros, data.galpones, data.pedidos || [], data.stock || [], data.pesajes || []);
+        await restaurarDatos(data.registros, data.galpones, data.pedidos || [], data.stock || [], data.pesajes || [], data.gastos || [], data.ventas || []);
         toast('Respaldo restaurado ✓');
         cerrarPerfil();
         renderCurrentView();
@@ -3244,6 +3833,8 @@ async function cargarDatos() {
   if (p) { try { state.perfil = Object.assign(state.perfil, JSON.parse(p)); } catch (e) {} }
   const mc = await storeGet('maplesConfig', false);
   if (mc) { try { state.maplesConfig = Object.assign(state.maplesConfig, JSON.parse(mc)); } catch (e) {} }
+  const pr = await storeGet('precios', false);
+  if (pr) { try { state.precios = Object.assign(state.precios, JSON.parse(pr)); } catch (e) {} }
 
   renderNav();
   setTab('inicio');
@@ -3260,6 +3851,10 @@ async function cargarDatosLocales() {
   if (st) { try { state.stock = JSON.parse(st); } catch (e) {} }
   const ps = await storeGet('pesajes', true);
   if (ps) { try { state.pesajes = JSON.parse(ps); } catch (e) {} }
+  const gt = await storeGet('gastos', true);
+  if (gt) { try { state.gastos = JSON.parse(gt); } catch (e) {} }
+  const vn = await storeGet('ventas', true);
+  if (vn) { try { state.ventas = JSON.parse(vn); } catch (e) {} }
   if (!state.galpones.length) {
     state.galpones = [{ id: 'g_default', nombre: 'Galpón 1', capacidad: 0 }];
     await guardarGalponesLocal();
