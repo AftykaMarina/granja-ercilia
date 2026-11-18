@@ -1492,6 +1492,14 @@ function renderInicio() {
   const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
   const picoPostura = picoDiario ? picoDiario.porcentaje : null;
   const fechaPicoPostura = picoDiario ? fmtDateShort(picoDiario.fecha) : '';
+  /* Postura promedio: huevos por día (solo días con registro) ÷ gallinas.
+     Si el mes consultado no tiene registros, se muestra el promedio histórico para no dejar el dato vacío. */
+  const ppMes = posturaPromedio(null, mes + '-01', mesFin, gallinasRecuentoReciente());
+  const ppHist = ppMes === null ? posturaPromedio(null, null, null, gallinasRecuentoReciente()) : null;
+  const ppValor = ppMes !== null ? ppMes : ppHist;
+  const ppSub = ppMes !== null
+    ? 'promedio del mes' + (picoPostura !== null && Math.abs(picoPostura - ppMes) >= 0.05 ? ' · mejor día ' + pct(picoPostura) : '')
+    : (ppHist !== null ? 'promedio general · sin registros en ' + fmtMonthLabel(mes) : 'sin registros de producción');
 
   const desde = shiftMes(mes, -5);
   const meses = [];
@@ -1515,7 +1523,7 @@ function renderInicio() {
       statCard('Ingresos por ventas', money(r.ingresos), 'huevos y otros productos', 'ok') +
       statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
       statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
-      statCard('Pico de postura diario', picoPostura === null ? '—' : pct(picoPostura), picoPostura === null ? 'sin registros de producción' : 'mejor día: ' + fechaPicoPostura, picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura promedio', ppValor === null ? '—' : pct(ppValor), ppSub, ppValor === null ? 'warn' : ppValor >= 80 ? 'ok' : ppValor >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
     '<section class="panel">' +
@@ -2945,7 +2953,10 @@ function resumenCaja(mes) {
   const gastosMes = (state.gastos || []).filter(g => {
     const gm = (g.fecha || '').slice(0, 7);
     if (!gm) return false;
-    return g.tipo === 'UNICO' ? gm === mes : gm <= mes;
+    if (g.tipo === 'UNICO') return gm === mes;
+    if (gm > mes) return false;
+    if (g.hasta && mes > g.hasta) return false;
+    return true;
   });
   let gastosFijosMes = 0, gastosVariableUnit = 0;
   gastosMes.forEach(g => {
@@ -3028,7 +3039,7 @@ function renderCaja() {
       let sub = '';
       if (g.tipo === 'MAPLE') sub = money(g.monto) + ' por maple × ' + (Math.round(r.baseMaple * 10) / 10) + ' maples';
       else if (g.tipo === 'UNICO') sub = 'Solo ' + fmtMonthLabel(gm);
-      else sub = '';
+      else sub = g.ajustado ? 'Valor nuevo desde ' + fmtMonthLabel(gm) : '';
       const tag = g.tipo === 'MAPLE' ? '<span class="gastoTag gastoTag--maple">Por maple</span>' : g.tipo === 'UNICO' ? '<span class="gastoTag gastoTag--unico">Solo este mes</span>' : '<span class="gastoTag">Mensual</span>';
       return '<div class="cajaRow">' +
         '<div class="cajaRow__main"><strong>' + escapeHtml(g.descripcion || '-') + '</strong>' + tag +
@@ -3118,6 +3129,7 @@ function renderCaja() {
 
     '<section class="panel">' +
       '<div class="panel__head"><h3>Gastos del mes</h3><span class="chip chip--on" style="flex:none">' + money(r.gastosCargadosMes) + '</span></div>' +
+      '<p class="cajaNota" style="margin:0 0 10px">Los que dicen <b>Mensual</b> se repiten solos todos los meses. Si cambiás el monto, el valor nuevo vale <b>desde el mes que elijas</b>: los meses anteriores quedan como estaban.</p>' +
       '<div class="cajaGrid" style="margin-bottom:6px">' +
         '<div class="cajaMini"><span>Gastos sin envases</span><strong>' + money(r.gastosFijosMes) + '</strong></div>' +
         '<div class="cajaMini"><span>Envases de la producción</span><strong>' + money(r.gastosVariable) + '</strong></div>' +
@@ -3211,23 +3223,27 @@ function renderCaja() {
 function abrirGastoModal(id) {
   const g = id ? (state.gastos || []).find(x => x.id === id) : null;
   const mes = state.cajaMes || mesActualKey();
-  const fecha = g ? (g.fecha || mes + '-01') : (mes === mesActualKey() ? todayStr() : mes + '-01');
+  const tipoIni = g ? (g.tipo || 'MENSUAL') : 'MENSUAL';
+  const mesIni = g ? (g.fecha || mes + '-01').slice(0, 7) : mes;
+  const fechaIni = g ? (g.fecha || mes + '-01') : (mes === mesActualKey() ? todayStr() : mes + '-01');
+  const esUnico = tipoIni === 'UNICO';
   const modal = document.getElementById('modalEditar');
   modal.innerHTML =
     '<div class="modalCard">' +
       '<div class="modalCard__head"><h3>' + (g ? 'Editar gasto' : 'Nuevo gasto') + '</h3><button class="iconBtn" id="cerrarGasto">' + ICONS.x + '</button></div>' +
       '<form id="formGasto" class="form">' +
+        '<label class="field"><span>¿Cómo se repite?</span><select id="gt_tipo">' +
+          '<option value="MENSUAL"' + (tipoIni === 'MENSUAL' ? ' selected' : '') + '>Todos los meses (fijo)</option>' +
+          '<option value="UNICO"' + (tipoIni === 'UNICO' ? ' selected' : '') + '>Solo este mes</option>' +
+          '<option value="MAPLE"' + (tipoIni === 'MAPLE' ? ' selected' : '') + '>Por cada maple vendido</option>' +
+        '</select></label>' +
         '<label class="field"><span>Categoría</span><select id="gt_cat">' +
           CATEGORIAS_GASTO.map(c => '<option value="' + c + '"' + (g && g.categoria === c ? ' selected' : '') + '>' + c + '</option>').join('') +
         '</select></label>' +
         '<label class="field"><span>Descripción</span><input type="text" id="gt_desc" placeholder="Ej: Alimento balanceado" value="' + escapeHtml(g ? (g.descripcion || '') : '') + '" required></label>' +
         '<label class="field"><span>Monto ($)</span><input type="number" min="0" step="1" id="gt_monto" value="' + (g ? (Number(g.monto) || 0) : '') + '" required></label>' +
-        '<label class="field"><span>¿Cómo se repite?</span><select id="gt_tipo">' +
-          '<option value="MENSUAL"' + (g && g.tipo === 'MENSUAL' ? ' selected' : '') + '>Todos los meses (fijo)</option>' +
-          '<option value="UNICO"' + (g && g.tipo === 'UNICO' ? ' selected' : '') + '>Solo este mes</option>' +
-          '<option value="MAPLE"' + (g && g.tipo === 'MAPLE' ? ' selected' : '') + '>Por cada maple producido</option>' +
-        '</select></label>' +
-        '<label class="field"><span id="gt_fechaLbl">' + (g && g.tipo === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes') + '</span><input type="date" id="gt_fecha" value="' + fecha + '"></label>' +
+        '<label class="field" id="fldMes"' + (esUnico ? ' style="display:none"' : '') + '><span>Vale desde el mes</span><input type="month" id="gt_mes" value="' + mesIni + '"></label>' +
+        '<label class="field" id="fldFecha"' + (esUnico ? '' : ' style="display:none"') + '><span>Fecha del gasto</span><input type="date" id="gt_fecha" value="' + fechaIni + '"></label>' +
         '<p class="cajaNota" id="gt_hint"></p>' +
         '<button type="submit" class="btn btn--primary">' + (g ? 'Guardar cambios' : 'Agregar gasto') + '</button>' +
       '</form>' +
@@ -3239,12 +3255,13 @@ function abrirGastoModal(id) {
   const tipoSel = document.getElementById('gt_tipo');
   const actualizarHint = () => {
     const t = tipoSel.value;
-    document.getElementById('gt_fechaLbl').textContent = t === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes';
+    document.getElementById('fldMes').style.display = t === 'UNICO' ? 'none' : '';
+    document.getElementById('fldFecha').style.display = t === 'UNICO' ? '' : 'none';
     hint.textContent = t === 'MAPLE'
-      ? 'Poné cuánto cuesta por cada maple (por ejemplo, envases). Se multiplica por los maples producidos aptos para venta.'
+      ? 'Por cada maple vendido. Se cuenta todos los meses desde el mes que elijas: si cambiás el precio de los envases, el nuevo vale desde ahí y los meses anteriores no se tocan.'
       : t === 'UNICO'
         ? 'Se cuenta solo en el mes de esa fecha (por ejemplo, una reparación).'
-        : 'Se cuenta todos los meses desde esa fecha, sin volver a cargarlo.';
+        : 'Se repite todos los meses. Si cambiás el monto, el valor nuevo vale desde el mes que elijas y los meses anteriores quedan como estaban.';
   };
   tipoSel.addEventListener('change', actualizarHint);
   actualizarHint();
@@ -3253,18 +3270,41 @@ function abrirGastoModal(id) {
     e.preventDefault();
     const descripcion = document.getElementById('gt_desc').value.trim();
     const monto = Number(document.getElementById('gt_monto').value) || 0;
+    const tipo = tipoSel.value;
+    const categoria = document.getElementById('gt_cat').value;
     if (!descripcion) { toast('Poné una descripción.'); return; }
     if (monto <= 0) { toast('Poné un monto mayor a cero.'); return; }
-    const datos = {
-      categoria: document.getElementById('gt_cat').value,
-      descripcion: descripcion,
-      monto: monto,
-      tipo: tipoSel.value,
-      fecha: document.getElementById('gt_fecha').value || mes + '-01'
-    };
+    let fecha;
+    if (tipo === 'UNICO') {
+      fecha = document.getElementById('gt_fecha').value || mes + '-01';
+    } else {
+      const m = document.getElementById('gt_mes').value || mes;
+      fecha = m + '-01';
+    }
+    const nuevoMes = fecha.slice(0, 7);
+    const datos = { categoria: categoria, descripcion: descripcion, monto: monto, tipo: tipo, fecha: fecha };
+
     try {
-      if (g) { await actualizarGasto(g.id, datos); toast('Gasto actualizado \u2713'); }
-      else {
+      if (g && g.tipo !== 'UNICO' && nuevoMes > (g.fecha || '').slice(0, 7)) {
+        const cambio = monto !== (Number(g.monto) || 0) || descripcion !== (g.descripcion || '') || categoria !== (g.categoria || '');
+        if (cambio) {
+          await actualizarGasto(g.id, { hasta: shiftMes(nuevoMes, -1) });
+          await crearGasto({
+            id: 'gt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            categoria: categoria, descripcion: descripcion, monto: monto, tipo: tipo, fecha: fecha,
+            ajustado: true, creadoEn: new Date().toISOString(), usuario: state.perfil.nombre || ''
+          });
+          modal.classList.remove('modal--open');
+          toast('Listo: el valor nuevo vale desde ' + fmtMonthLabel(nuevoMes) + '. Los meses anteriores quedan igual.');
+          renderCaja();
+          return;
+        }
+      }
+      if (g) {
+        datos.ajustado = true;
+        await actualizarGasto(g.id, datos);
+        toast('Gasto actualizado \u2713');
+      } else {
         datos.id = 'gt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
         datos.creadoEn = new Date().toISOString();
         datos.usuario = state.perfil.nombre || '';
