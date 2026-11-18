@@ -1922,7 +1922,7 @@ function renderLotes() {
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
-      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th><th></th></tr></thead><tbody>' +
+      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Postura</th><th>Huevos sem.</th><th>Huevos mes</th><th></th></tr></thead><tbody>' +
         filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + resumenLote(f.g) + '</td>' +
           '<td>' + num(f.hoyG) + '</td>' +
           '<td>' + (function() { const pp = posturaPromedio([f.g.id], inicioSemana, hoy); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
