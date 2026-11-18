@@ -3310,9 +3310,46 @@ async function cargarGastosPlanilla() {
   }
 
   const existentes = state.gastos || [];
-  const yaEsta = (s) => existentes.some(g => g.categoria === s.categoria && (g.descripcion || '') === s.descripcion);
-  const faltan = PLANILLA_GASTOS.filter(s => !yaEsta(s));
-  if (!faltan.length) { toast('Los gastos de la planilla ya est\u00e1n cargados \u2713'); return; }
+  const faltan = [];
+  let actualizados = 0;
+
+  // MENSUAL y MAPLE son gastos recurrentes desde su fecha de inicio.
+  // Si ya existen con una fecha posterior al mes elegido, adelantamos su
+  // inicio para que también cubran ese período, sin crear duplicados.
+  for (const s of PLANILLA_GASTOS) {
+    const coincidencias = existentes.filter(g =>
+      g.categoria === s.categoria && (g.descripcion || '') === s.descripcion
+    );
+    if (s.tipo === 'UNICO') {
+      const existeEnMes = coincidencias.some(g => (g.fecha || '').slice(0, 7) === mes);
+      if (!existeEnMes) faltan.push(s);
+      continue;
+    }
+
+    const recurrenteActivo = coincidencias.find(g => {
+      const gm = (g.fecha || '').slice(0, 7);
+      return g.tipo !== 'UNICO' && gm && gm <= mes;
+    });
+    if (recurrenteActivo) continue;
+
+    const recurrenteFuturo = coincidencias
+      .filter(g => (g.tipo !== 'UNICO') && (g.fecha || '').slice(0, 7) > mes)
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))[0];
+    if (recurrenteFuturo) {
+      await actualizarGasto(recurrenteFuturo.id, { fecha: mes + '-01' });
+      actualizados++;
+    } else {
+      faltan.push(s);
+    }
+  }
+
+  if (!faltan.length) {
+    toast(actualizados
+      ? 'Planilla actualizada para ' + fmtMonthLabel(mes) + ' \u2713'
+      : 'Los gastos de la planilla ya están cargados para este mes \\u2713');
+    renderCaja();
+    return;
+  }
 
   const porCat = {};
   faltan.forEach(s => {
@@ -3337,7 +3374,7 @@ async function cargarGastosPlanilla() {
         fecha: mes + '-01', sugerido: true, creadoEn: new Date().toISOString(), usuario: state.perfil.nombre || ''
       });
     }
-    toast(faltan.length + ' gastos cargados \u2713');
+    toast(faltan.length + ' gastos cargados' + (actualizados ? ' y ' + actualizados + ' actualizados' : '') + ' \u2713');
     renderCaja();
   } catch (err) { toast('No se pudieron cargar: ' + err.message); }
 }
