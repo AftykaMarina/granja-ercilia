@@ -2891,7 +2891,7 @@ function ultimoDiaMes(mes) {
   const d = new Date(p[0], p[1], 0);
   return mes + '-' + pad2(d.getDate());
 }
-function fechaIngresoPedido(pd) { return pd.fechaEntrega || pd.fechaPago || pd.fechaNecesaria || pd.fechaReserva || ''; }
+function fechaIngresoPedido(pd) { return pd.fechaEntrega || pd.fechaPago || pd.fechaNecesaria || pd.fechaReserva || pd.fecha || ''; }
 function maplesDePedido(pd) {
   if (pd.producto !== 'HUEVOS') return 0;
   if (pd.presentacion === 'MAPLE') return Number(pd.cantidadPresentacion) || 0;
@@ -2909,12 +2909,15 @@ function maplesProducidosMes(mes) {
   return regs.reduce((s, r) => s + totalRegistro(r), 0) / 30;
 }
 function resumenCaja(mes) {
-  const ventas = (state.ventas || []).filter(v => (v.fecha || '').indexOf(mes) === 0);
-  const pedidos = (state.pedidos || []).filter(pd => pd.estado === 'ENTREGADO' && fechaIngresoPedido(pd).indexOf(mes) === 0 && Number(pd.precioTotal) > 0);
-  const ingresoVentas = ventas.reduce((s, v) => s + (Number(v.precioTotal) || 0), 0);
+  /* Los ingresos salen solo de Pedidos: cada pedido entregado con su precio. */
+  const ventas = [];
+  const pedidosMes = (state.pedidos || []).filter(pd => pd.estado === 'ENTREGADO' && fechaIngresoPedido(pd).indexOf(mes) === 0);
+  const pedidos = pedidosMes.filter(pd => Number(pd.precioTotal) > 0);
+  const pedidosSinPrecio = pedidosMes.filter(pd => !(Number(pd.precioTotal) > 0));
+  const ingresoVentas = 0;
   const ingresoPedidos = pedidos.reduce((s, pd) => s + (Number(pd.precioTotal) || 0), 0);
-  const maplesVentas = ventas.reduce((s, v) => s + (Number(v.maples) || 0), 0);
-  const maplesPedidos = pedidos.reduce((s, pd) => s + maplesDePedido(pd), 0);
+  const maplesVentas = 0;
+  const maplesPedidos = pedidosMes.reduce((s, pd) => s + maplesDePedido(pd), 0);
   const maplesVendidos = maplesVentas + maplesPedidos;
   const producidos = maplesProducidosMes(mes);
   const baseMaple = maplesVendidos > 0 ? maplesVendidos : producidos;
@@ -2945,7 +2948,7 @@ function resumenCaja(mes) {
   const precioProm = maplesVendidos > 0 ? ingresos / maplesVendidos : null;
   const gananciaMaple = (costoMaple !== null && precioProm !== null) ? precioProm - costoMaple : null;
   const margen = (ingresos > 0 && gastosTotal > 0) ? (ganancia / ingresos) * 100 : null;
-  return { mes: mes, ventas: ventas, pedidos: pedidos, ingresoVentas: ingresoVentas, ingresoPedidos: ingresoPedidos,
+  return { mes: mes, ventas: ventas, pedidos: pedidos, pedidosSinPrecio: pedidosSinPrecio, ingresoVentas: ingresoVentas, ingresoPedidos: ingresoPedidos,
     ingresos: ingresos, maplesVentas: maplesVentas, maplesPedidos: maplesPedidos, maplesVendidos: maplesVendidos,
     producidos: producidos, baseMaple: baseMaple, gastosMes: gastosMes, gastosFijos: gastosFijos,
     gastosFijosMes: gastosFijosMes, gastosVariableUnit: gastosVariableUnit, gastosVariable: gastosVariable,
@@ -2986,7 +2989,7 @@ function renderCaja() {
       let sub = '';
       if (g.tipo === 'MAPLE') sub = money(g.monto) + ' por maple × ' + (Math.round(r.baseMaple * 10) / 10) + ' maples';
       else if (g.tipo === 'UNICO') sub = 'Solo ' + fmtMonthLabel(gm);
-      else sub = 'Todos los meses desde ' + fmtMonthLabel(gm);
+      else sub = '';
       const tag = g.tipo === 'MAPLE' ? '<span class="gastoTag gastoTag--maple">Por maple</span>' : g.tipo === 'UNICO' ? '<span class="gastoTag gastoTag--unico">Solo este mes</span>' : '<span class="gastoTag">Mensual</span>';
       return '<div class="cajaRow">' +
         '<div class="cajaRow__main"><strong>' + escapeHtml(g.descripcion || '-') + '</strong>' + tag +
@@ -2999,29 +3002,15 @@ function renderCaja() {
     }).join('');
   });
 
-  /* --- lista de ventas del mes --- */
-  const ventasOrden = r.ventas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-  let ventasHtml = ventasOrden.map(v => {
-    const nm = Number(v.maples) || 0;
-    const tot = Number(v.precioTotal) || 0;
-    const unit = nm > 0 ? tot / nm : 0;
+  /* --- lista de pedidos entregados del mes --- */
+  const pedidosListaHtml = r.pedidos.length ? r.pedidos.map(pd => {
+    const nm = maplesDePedido(pd);
     return '<div class="cajaRow">' +
-      '<div class="cajaRow__main"><strong>' + fmtDateShort(v.fecha) + ' · ' + (Math.round(nm * 10) / 10) + ' maples</strong>' +
-        '<div class="cajaRow__sub">' + money(unit) + ' por maple' + (v.cliente ? ' · ' + escapeHtml(v.cliente) : '') + '</div></div>' +
-      '<div class="cajaRow__monto">' + money(tot) + '</div>' +
-      '<div class="cajaRow__actions"><button class="iconBtn iconBtn--danger" data-delv="' + v.id + '" aria-label="Eliminar venta">' + ICONS.trash + '</button></div>' +
-    '</div>';
-  }).join('');
-  if (r.pedidos.length) {
-    ventasHtml += r.pedidos.map(pd => {
-      const nm = maplesDePedido(pd);
-      return '<div class="cajaRow">' +
-        '<div class="cajaRow__main"><strong>' + escapeHtml(pd.clienteNombre || 'Pedido') + '</strong> <span class="gastoTag gastoTag--unico">Pedido entregado</span>' +
-          '<div class="cajaRow__sub">' + fmtDateShort(fechaIngresoPedido(pd)) + (nm ? ' · ' + (Math.round(nm * 10) / 10) + ' maples' : '') + '</div></div>' +
-        '<div class="cajaRow__monto">' + money(pd.precioTotal) + '</div>' +
-        '<div class="cajaRow__actions"></div></div>';
-    }).join('');
-  }
+      '<div class="cajaRow__main"><strong>' + escapeHtml(pd.clienteNombre || 'Pedido') + '</strong>' +
+        '<div class="cajaRow__sub">' + fmtDateShort(fechaIngresoPedido(pd)) + (nm ? ' · ' + (Math.round(nm * 10) / 10) + ' maples' : '') + '</div></div>' +
+      '<div class="cajaRow__monto">' + money(pd.precioTotal) + '</div>' +
+      '<div class="cajaRow__actions"></div></div>';
+  }).join('') : '<div class="muted" style="margin-top:8px">Todavía no hay pedidos entregados en ' + mesLabel + '.</div>';
 
   /* --- simulación de venta diaria --- */
   const maplesDia = Math.max(1, Math.floor(Number(state.maplesConfig.maples) || 7));
@@ -3043,7 +3032,7 @@ function renderCaja() {
     '<section class="cajaHero">' +
       '<div class="cajaHero__label">Ganancia de ' + mesLabel + '</div>' +
       '<div class="cajaHero__big ' + (r.ganancia >= 0 ? 'pos' : 'neg') + '">' + (hayDatos ? money(r.ganancia) : '$ 0') + '</div>' +
-      '<div class="cajaHero__sub">' + (hayDatos ? 'Margen real: ' + (r.margen !== null ? pct(r.margen) : '—') : 'Cargá tus ventas y gastos para ver la ganancia real') + '</div>' +
+      '<div class="cajaHero__sub">' + (hayDatos ? 'Margen real: ' + (r.margen !== null ? pct(r.margen) : '—') : 'Cargá pedidos entregados y gastos para ver la ganancia real') + '</div>' +
       '<div class="cajaHero__row">' +
         '<div class="cajaHero__item"><span>Ingresos</span><strong>' + money(r.ingresos) + '</strong></div>' +
         '<div class="cajaHero__item"><span>Gastos</span><strong>' + money(r.gastosTotal) + '</strong></div>' +
@@ -3060,28 +3049,15 @@ function renderCaja() {
         '<div class="cajaMini"><span>Precio promedio</span><strong>' + (r.precioProm !== null ? money(r.precioProm) : '—') + '</strong></div>' +
         '<div class="cajaMini"><span>Ganancia por maple</span><strong>' + (r.gananciaMaple !== null ? money(r.gananciaMaple) : '—') + '</strong></div>' +
       '</div>' +
-      '<p class="cajaNota">' + (r.maplesVendidos > 0 ? 'El costo por maple usa los ' + (Math.round(r.maplesVendidos * 10) / 10) + ' maples vendidos del mes.' : (r.producidos > 0 ? 'Todavía no cargaste ventas: el costo por maple se calcula sobre los ' + (Math.round(r.producidos * 10) / 10) + ' maples producidos.' : 'Cargá una venta o un registro de producción para calcular el costo por maple.')) + (r.factorDias < 1 && r.gastosTotal > 0 ? ' Los gastos fijos se cuentan por los ' + r.diasTranscurridos + ' días que van del mes.' : '') + '</p>' +
+      '<p class="cajaNota">' + (r.maplesVendidos > 0 ? 'El costo por maple usa los ' + (Math.round(r.maplesVendidos * 10) / 10) + ' maples vendidos del mes.' : (r.producidos > 0 ? 'Todavía no hay pedidos entregados: el costo por maple se calcula sobre los ' + (Math.round(r.producidos * 10) / 10) + ' maples producidos.' : 'Entregá pedidos o cargá un registro de producción para calcular el costo por maple.')) + (r.factorDias < 1 && r.gastosTotal > 0 ? ' Los gastos fijos se cuentan por los ' + r.diasTranscurridos + ' días que van del mes.' : '') + '</p>' +
     '</section>' +
 
     '<section class="panel">' +
-      '<div class="panel__head"><h3>Ingresos por ventas</h3></div>' +
-      '<div class="cajaGrid" style="margin-bottom:12px">' +
-        '<div class="cajaMini"><span>Ventas cargadas</span><strong>' + money(r.ingresoVentas) + '</strong></div>' +
-        '<div class="cajaMini"><span>Pedidos entregados</span><strong>' + money(r.ingresoPedidos) + '</strong></div>' +
-      '</div>' +
-      '<form id="formVenta" class="form">' +
-        '<div class="formRow2">' +
-          '<label class="field"><span>Fecha</span><input type="date" id="cv_fecha" value="' + (esMesActual ? todayStr() : ultimoDiaMes(mes)) + '"></label>' +
-          '<label class="field"><span>Maples vendidos</span><input type="number" min="1" step="1" id="cv_maples" value="1"></label>' +
-        '</div>' +
-        '<div class="formRow2">' +
-          '<label class="field"><span>Total cobrado ($)</span><input type="number" min="0" step="1" id="cv_total" value="' + precioSugerido(1) + '"></label>' +
-          '<label class="field"><span>Cliente (opcional)</span><input type="text" id="cv_cliente" placeholder="Ej: almacén"></label>' +
-        '</div>' +
-        '<p class="cajaNota" id="cv_hint">1 maple = ' + money(p.uno) + '</p>' +
-        '<button type="submit" class="btn btn--primary">Registrar venta</button>' +
-      '</form>' +
-      (ventasHtml ? ventasHtml : '<div class="muted" style="margin-top:10px">Todavía no hay ventas cargadas en ' + mesLabel + '.</div>') +
+      '<div class="panel__head"><h3>Ventas del mes</h3><span class="chip chip--on" style="flex:none">' + money(r.ingresoPedidos) + '</span></div>' +
+      '<p class="cajaNota" style="margin:0 0 10px">Salen de la pestaña <b>Pedidos</b>: cada pedido que marcaste entregado, con su cliente y su precio. No hay nada que cargar acá.</p>' +
+      '<button class="btn btn--ghost" id="btnIrPedidos" style="margin:4px 0 12px">Ver mis pedidos ›</button>' +
+      (r.pedidosSinPrecio.length ? '<p class="cajaNota" style="color:#a0522d">' + r.pedidosSinPrecio.length + (r.pedidosSinPrecio.length === 1 ? ' pedido entregado no tiene precio cargado' : ' pedidos entregados no tienen precio cargado') + ' y no suma en la caja. Abrí ese pedido en Pedidos y poné el total.</p>' : '') +
+      pedidosListaHtml +
     '</section>' +
 
     '<section class="panel">' +
@@ -3096,10 +3072,12 @@ function renderCaja() {
         '<button class="btn btn--primary" id="btnNuevoGasto" style="flex:1">+ Nuevo gasto</button>' +
         '<button class="btn btn--ghost" id="btnGastosPlanilla" style="flex:1">Cargar planilla</button>' +
       '</div>' +
+      '<p class="cajaNota">La planilla trae 17 gastos ya clasificados: 4 de alimento, 4 de sanidad, 4 operativos y 5 de envases por maple.</p>' +
     '</section>' +
 
     '<section class="panel">' +
       '<div class="panel__head"><h3>Precios de venta</h3></div>' +
+      '<p class="cajaNota" style="margin:0 0 10px">Tus precios de combo. Se usan en la simulación de abajo para estimar la ganancia.</p>' +
       '<div class="formRow2">' +
         '<label class="field"><span>1 maple</span><input type="number" min="0" step="100" id="pr_uno" value="' + (Number(p.uno) || 0) + '"></label>' +
         '<label class="field"><span>2 maples (total)</span><input type="number" min="0" step="100" id="pr_dos" value="' + (Number(p.dos) || 0) + '"></label>' +
@@ -3136,43 +3114,8 @@ function renderCaja() {
   const btnNext = document.getElementById('cjNext');
   if (btnNext) btnNext.addEventListener('click', () => { state.cajaMes = shiftMes(mes, 1); renderCaja(); });
 
-  const inpMaples = document.getElementById('cv_maples');
-  const inpTotal = document.getElementById('cv_total');
-  const hint = document.getElementById('cv_hint');
-  const actualizarPrecio = () => {
-    const m = Math.max(1, Math.floor(Number(inpMaples.value) || 0));
-    const sug = precioSugerido(m);
-    inpTotal.value = sug;
-    const unit = m > 0 ? sug / m : 0;
-    hint.textContent = m === 1 ? '1 maple = ' + money(sug) : m === 2 ? '2 maples = ' + money(sug) + ' (' + money(unit) + ' c/u)' : m + ' maples = ' + money(sug) + ' (' + money(unit) + ' c/u)';
-  };
-  inpMaples.addEventListener('input', actualizarPrecio);
-
-  document.getElementById('formVenta').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const maples = Number(inpMaples.value) || 0;
-    const total = Number(inpTotal.value) || 0;
-    if (maples < 1) { toast('Poné cuántos maples vendiste.'); return; }
-    if (total <= 0) { toast('Poné el total cobrado.'); return; }
-    const venta = {
-      id: 'vn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      fecha: document.getElementById('cv_fecha').value || (esMesActual ? todayStr() : ultimoDiaMes(mes)),
-      maples: maples,
-      precioTotal: total,
-      cliente: document.getElementById('cv_cliente').value.trim(),
-      usuario: state.perfil.nombre || '',
-      creadoEn: new Date().toISOString()
-    };
-    try { await crearVenta(venta); toast('Venta registrada \u2713'); }
-    catch (err) { toast('No se pudo guardar: ' + err.message); }
-  });
-
-  el.querySelectorAll('[data-delv]').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('\u00bfBorrar esta venta?')) return;
-    try { await eliminarVentaPorId(btn.getAttribute('data-delv')); toast('Venta eliminada'); renderCaja(); }
-    catch (err) { toast('No se pudo borrar: ' + err.message); }
-  }));
-
+  const btnIrPedidos = document.getElementById('btnIrPedidos');
+  if (btnIrPedidos) btnIrPedidos.addEventListener('click', () => setTab('pedidos'));
   document.getElementById('btnNuevoGasto').addEventListener('click', () => abrirGastoModal(null));
   document.getElementById('btnGastosPlanilla').addEventListener('click', cargarGastosPlanilla);
   el.querySelectorAll('[data-editg]').forEach(btn => btn.addEventListener('click', () => abrirGastoModal(btn.getAttribute('data-editg'))));
@@ -3278,26 +3221,76 @@ function abrirGastoModal(id) {
   });
 }
 
+const PLANILLA_GASTOS = [
+  /* Alimento: la planilla trae el costo diario, acá va el mensual (x30) */
+  { categoria: 'Alimento', descripcion: 'Alimento balanceado (bolsa 20 kg)', monto: 515182, tipo: 'MENSUAL' },
+  { categoria: 'Alimento', descripcion: 'Conchilla', monto: 10200, tipo: 'MENSUAL' },
+  { categoria: 'Alimento', descripcion: 'Suplemento 15%', monto: 94867, tipo: 'MENSUAL' },
+  { categoria: 'Alimento', descripcion: 'Verduras', monto: 21429, tipo: 'MENSUAL' },
+  /* Sanidad */
+  { categoria: 'Sanidad', descripcion: 'Veterinaria (1 visita al mes)', monto: 95000, tipo: 'MENSUAL' },
+  { categoria: 'Sanidad', descripcion: 'Vinagre', monto: 10000, tipo: 'MENSUAL' },
+  { categoria: 'Sanidad', descripcion: 'Probióticos', monto: 10000, tipo: 'MENSUAL' },
+  { categoria: 'Sanidad', descripcion: 'Antiparasitario', monto: 75000, tipo: 'MENSUAL' },
+  /* Operativos: ya vienen mensuales en la planilla */
+  { categoria: 'Operativos', descripcion: 'Viruta', monto: 26000, tipo: 'MENSUAL' },
+  { categoria: 'Operativos', descripcion: 'Luz', monto: 75000, tipo: 'MENSUAL' },
+  { categoria: 'Operativos', descripcion: 'Mantenimiento', monto: 160000, tipo: 'MENSUAL' },
+  { categoria: 'Operativos', descripcion: 'Nafta', monto: 100000, tipo: 'MENSUAL' },
+  /* Envases: por maple ($464 en total) */
+  { categoria: 'Envases', descripcion: 'Maple', monto: 317, tipo: 'MAPLE' },
+  { categoria: 'Envases', descripcion: 'Film', monto: 40, tipo: 'MAPLE' },
+  { categoria: 'Envases', descripcion: 'Etiquetas', monto: 80, tipo: 'MAPLE' },
+  { categoria: 'Envases', descripcion: 'Sellos', monto: 2, tipo: 'MAPLE' },
+  { categoria: 'Envases', descripcion: 'Bolsitas', monto: 25, tipo: 'MAPLE' }
+];
+
+const PLANILLA_VIEJOS = [
+  'Alimento + conchilla + suplemento',
+  'Sanidad: veterinaria, vinagre, probióticos, antiparasitario',
+  'Viruta, luz, mantenimiento y nafta',
+  'Maples, film, etiquetas, sellos y bolsitas'
+];
+
 async function cargarGastosPlanilla() {
   const mes = state.cajaMes || mesActualKey();
-  const yaCargados = (state.gastos || []).some(g => g.sugerido);
-  if (yaCargados && !confirm('Ya cargaste los gastos de la planilla antes. ¿Querés volver a cargarlos?')) return;
-  if (!yaCargados && !confirm('Se van a cargar 4 gastos de tu planilla (alimento, sanidad, operativos y envases por maple). Después podés editarlos o borrarlos. ¿Seguimos?')) return;
-  const sugeridos = [
-    { categoria: 'Alimento', descripcion: 'Alimento + conchilla + suplemento', monto: 641677, tipo: 'MENSUAL' },
-    { categoria: 'Sanidad', descripcion: 'Sanidad: veterinaria, vinagre, probióticos, antiparasitario', monto: 190000, tipo: 'MENSUAL' },
-    { categoria: 'Operativos', descripcion: 'Viruta, luz, mantenimiento y nafta', monto: 361000, tipo: 'MENSUAL' },
-    { categoria: 'Envases', descripcion: 'Maples, film, etiquetas, sellos y bolsitas', monto: 464, tipo: 'MAPLE' }
-  ];
+
+  /* Si venían los 4 gastos resumidos de la carga anterior, se cambian por el detalle */
+  const viejos = (state.gastos || []).filter(g => PLANILLA_VIEJOS.indexOf(g.descripcion || '') !== -1);
+  if (viejos.length) {
+    if (!confirm('Encontr\u00e9 ' + viejos.length + ' gastos resumidos de la carga anterior de la planilla.\n\nLos reemplazo por el detalle completo as\u00ed no se cuenta dos veces. \u00bfSeguimos?')) return;
+    for (const g of viejos) { try { await eliminarGastoPorId(g.id); } catch (e) {} }
+  }
+
+  const existentes = state.gastos || [];
+  const yaEsta = (s) => existentes.some(g => g.categoria === s.categoria && (g.descripcion || '') === s.descripcion);
+  const faltan = PLANILLA_GASTOS.filter(s => !yaEsta(s));
+  if (!faltan.length) { toast('Los gastos de la planilla ya est\u00e1n cargados \u2713'); return; }
+
+  const porCat = {};
+  faltan.forEach(s => {
+    if (!porCat[s.categoria]) porCat[s.categoria] = { n: 0, total: 0, maple: false };
+    porCat[s.categoria].n++;
+    porCat[s.categoria].total += s.monto;
+    if (s.tipo === 'MAPLE') porCat[s.categoria].maple = true;
+  });
+  const detalle = Object.keys(porCat).map(c => {
+    const d = porCat[c];
+    return '\u2022 ' + c + ': ' + d.n + (d.n === 1 ? ' gasto' : ' gastos') + ' \u2014 ' + money(d.total) + (d.maple ? ' por maple' : ' por mes');
+  }).join('\n');
+  const msg = 'Se van a cargar ' + faltan.length + ' gastos de tu planilla:\n\n' + detalle +
+    '\n\nDespu\u00e9s pod\u00e9s editar cualquiera, borrarlo o agregar nuevos. \u00bfSeguimos?';
+  if (!confirm(msg)) return;
+
   try {
-    for (const s of sugeridos) {
+    for (const s of faltan) {
       await crearGasto({
         id: 'gt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
         categoria: s.categoria, descripcion: s.descripcion, monto: s.monto, tipo: s.tipo,
         fecha: mes + '-01', sugerido: true, creadoEn: new Date().toISOString(), usuario: state.perfil.nombre || ''
       });
     }
-    toast('Gastos de la planilla cargados \u2713');
+    toast(faltan.length + ' gastos cargados \u2713');
     renderCaja();
   } catch (err) { toast('No se pudieron cargar: ' + err.message); }
 }
