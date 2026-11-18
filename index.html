@@ -719,14 +719,15 @@ async function crearGalpon(g) {
   }
 }
 async function actualizarGalpon(id, datosActualizados) {
+  /* Refresco local inmediato: así los números se ven al toque, sin esperar a la nube */
+  const idxLocal = state.galpones.findIndex(g => g.id === id);
+  if (idxLocal !== -1) state.galpones[idxLocal] = Object.assign({}, state.galpones[idxLocal], datosActualizados);
   if (db) {
-    await db.collection('galpones').doc(id).update(datosActualizados);
+    const limpio = {};
+    Object.keys(datosActualizados).forEach(k => { if (datosActualizados[k] !== undefined) limpio[k] = datosActualizados[k]; });
+    await db.collection('galpones').doc(id).set(limpio, { merge: true });
   } else {
-    const idx = state.galpones.findIndex(g => g.id === id);
-    if (idx !== -1) {
-      state.galpones[idx] = Object.assign({}, state.galpones[idx], datosActualizados);
-      await guardarGalponesLocal();
-    }
+    if (idxLocal !== -1) await guardarGalponesLocal();
   }
   renderLotes();
 }
@@ -1105,13 +1106,33 @@ function agregados(lista) {
 function diasConDatos(lista) {
   return new Set(lista.map(r => r.fecha)).size;
 }
+function avesGalpon(g) {
+  if (!g) return 0;
+  const cap = Number(g.capacidad) || 0;
+  const ini = Number(g.cantidadInicial) || 0;
+  return cap > 0 ? cap : ini;
+}
 function totalGallinas(galponIds) {
-  if (!galponIds) return state.galpones.reduce((s, g) => s + (Number(g.capacidad) || 0), 0);
-  return galponIds.reduce((s, gid) => { const g = state.galpones.find(x => x.id === gid); return s + (g && Number(g.capacidad) ? Number(g.capacidad) : 0); }, 0);
+  if (!galponIds) return state.galpones.reduce((s, g) => s + avesGalpon(g), 0);
+  return galponIds.reduce((s, gid) => { const g = state.galpones.find(x => x.id === gid); return s + avesGalpon(g); }, 0);
 }
 function picoPostura(huevos, galponIds) {
   const aves = totalGallinas(galponIds);
   return aves > 0 ? (huevos / aves) * 100 : null;
+}
+/* Postura promedio del período: huevos por día (solo días con registro) ÷ aves */
+function posturaPromedio(galponIds, desde, hasta, avesManual) {
+  const aves = avesManual !== undefined ? avesManual : totalGallinas(galponIds);
+  if (!aves || aves <= 0) return null;
+  const regs = state.registros.filter(r =>
+    (!galponIds || galponIds.indexOf(r.galponId) !== -1) && r.fecha >= desde && r.fecha <= hasta);
+  if (!regs.length) return null;
+  const porDia = {};
+  regs.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + totalRegistro(r); });
+  const dias = Object.keys(porDia);
+  if (!dias.length) return null;
+  const prom = dias.reduce((s, d) => s + porDia[d], 0) / dias.length;
+  return (prom / aves) * 100;
 }
 /* Gallinas del recuento más reciente: capacidad del galpón del último registro cargado.
    Si no hay registros o ese galpón no tiene capacidad, usa el total de todos los galpones. */
@@ -1343,7 +1364,7 @@ function renderInicio() {
       statCard('Mes', num(Math.floor(aggMes.total / 30)) + (aggMes.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggMes.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
       statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
       statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
-      (function() { const aves = gallinasRecuentoReciente(); const pp = aves > 0 ? (aggHoy.total / aves) * 100 : null; return pp !== null ? statCard('Pico de postura', pct(pp), 'huevos/gallinas hoy', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
+      (function() { const pp = posturaPromedio(null, addDays(hoy, -6), hoy, gallinasRecuentoReciente()); return pp !== null ? statCard('Pico de postura', pct(pp), 'promedio 7 días', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
     '</section>' +
 
     (aggHoy.total ? (
@@ -1658,8 +1679,11 @@ function abrirEditarGalponModal(id) {
 /* ---------- Lote / ciclo de vida del galpón ---------- */
 function diasEntre(desde, hasta) {
   if (!desde) return 0;
-  const a = new Date(desde + 'T00:00:00');
-  const b = new Date((hasta || todayStr()) + 'T00:00:00');
+  const d1 = String(desde).slice(0, 10);
+  const d2 = String(hasta || todayStr()).slice(0, 10);
+  const a = new Date(d1 + 'T00:00:00');
+  const b = new Date(d2 + 'T00:00:00');
+  if (isNaN(a) || isNaN(b)) return 0;
   return Math.max(0, Math.round((b - a) / 86400000));
 }
 function edadLote(g) {
@@ -1683,7 +1707,7 @@ function resumenLote(g) {
   return '<div class="muted" style="font-size:12px;margin-top:2px">Lote del ' + fmtDateShort(g.fechaIngreso) + ' · ' + e.semanas + ' sem' + (e.resto ? ' y ' + e.resto + ' d' : '') + (et ? ' · ' + et.txt : '') + '</div>';
 }
 function produccionPorEdadLote(g) {
-  const aves = Number(g.capacidad) || 0;
+  const aves = avesGalpon(g);
   const mapa = {};
   state.registros.filter(r => r.galponId === g.id && g.fechaIngreso && r.fecha >= g.fechaIngreso).forEach(r => {
     const sem = Math.floor(diasEntre(g.fechaIngreso, r.fecha) / 7) + 1;
@@ -1737,7 +1761,7 @@ function abrirHistorialGalpon(id) {
       '<tr><td>Edad del lote</td><td><strong>' + e.semanas + ' semanas</strong> <span class="muted">(' + e.dias + ' días)</span></td></tr>' +
       '<tr><td>Etapa</td><td><strong style="color:var(--' + et.tone + ')">' + et.txt + '</strong></td></tr>' +
       '<tr><td>Aves iniciales</td><td>' + (g.cantidadInicial ? num(g.cantidadInicial) : '<span class="muted">—</span>') + '</td></tr>' +
-      '<tr><td>Aves actuales</td><td>' + ((Number(g.capacidad) || 0) ? num(g.capacidad) : '<span class="muted">—</span>') + '</td></tr>' +
+      '<tr><td>Aves actuales</td><td>' + ((Number(g.capacidad) || 0) ? num(g.capacidad) : (Number(g.cantidadInicial) || 0) ? num(g.cantidadInicial) + ' <span class="muted">(usa la inicial)</span>' : '<span class="muted">—</span>') + '</td></tr>' +
       '<tr><td>En postura hace</td><td>' + (g.fechaPostura ? diasPostura + ' días <span class="muted">(desde ' + fmtDateShort(g.fechaPostura) + ')</span>' : '<span class="muted">Todavía no empezó</span>') + '</td></tr>' +
       '<tr><td>Huevos del lote</td><td>' + num(prod.totalHuevos) + '</td></tr>' +
     '</tbody></table></div>'
@@ -1755,13 +1779,13 @@ function abrirHistorialGalpon(id) {
         '<label class="field"><span>Cantidad inicial</span><input type="number" min="0" id="hg_inicial" value="' + (g.cantidadInicial || '') + '" placeholder="Ej: 250"></label>' +
         '<label class="field"><span>Aves actuales</span><input type="number" min="0" id="hg_aves" value="' + (g.capacidad || '') + '"></label>' +
       '</div>' +
+      '<button type="button" class="btn btn--primary" id="guardarLote">Guardar datos del lote</button>' +
       kpi +
       '<div class="fieldGroupTitle">Evolución por edad (postura semanal)</div>' +
       (prod.labels.length ? '<canvas id="chartEdadLote" height="200"></canvas>' : '<p class="modalNote">Todavía no hay producción registrada de este lote.</p>') +
       (hist.length ? '<div class="fieldGroupTitle">Lotes anteriores</div><div class="tableWrap"><table class="table"><thead><tr><th>Lote</th><th>Aves</th><th>Días</th></tr></thead><tbody>' +
         hist.map(h => '<tr><td>' + fmtDateShort(h.fechaIngreso) + ' → ' + (h.fechaFin ? fmtDateShort(h.fechaFin) : '—') + '</td><td>' + (h.cantidadInicial ? num(h.cantidadInicial) : '—') + '</td><td>' + (h.fechaIngreso && h.fechaFin ? diasEntre(h.fechaIngreso, h.fechaFin) : '—') + '</td></tr>').join('') +
         '</tbody></table></div>' : '') +
-      '<button type="button" class="btn btn--primary" id="guardarLote">Guardar datos del lote</button>' +
       (e ? '<button type="button" class="btn btn--ghost" id="cerrarLote" style="margin-top:8px">Cerrar lote y empezar uno nuevo</button>' : '') +
     '</div>';
 
@@ -1769,7 +1793,7 @@ function abrirHistorialGalpon(id) {
   document.getElementById('cerrarHist').addEventListener('click', () => modal.classList.remove('modal--open'));
   if (prod.labels.length) { try { drawPosturaPorEdad('chartEdadLote', prod); } catch (err) { console.warn(err); } }
 
-  document.getElementById('guardarLote').addEventListener('click', async () => {
+  const guardarLote = async (silencioso) => {
     const ingreso = document.getElementById('hg_ingreso').value || null;
     const postura = document.getElementById('hg_postura').value || null;
     if (ingreso && postura && postura < ingreso) { toast('El inicio de postura no puede ser antes del ingreso.'); return; }
@@ -1781,9 +1805,13 @@ function abrirHistorialGalpon(id) {
         capacidad: Number(document.getElementById('hg_aves').value) || 0
       });
       toast('Lote guardado ✓');
-      modal.classList.remove('modal--open');
-      renderLotes();
+      if (silencioso) { abrirHistorialGalpon(id); } else { modal.classList.remove('modal--open'); renderLotes(); }
     } catch (err) { toast('No se pudo guardar: ' + err.message); }
+  };
+  document.getElementById('guardarLote').addEventListener('click', () => guardarLote(false));
+  ['hg_ingreso', 'hg_postura', 'hg_inicial', 'hg_aves'].forEach(fid => {
+    const inp = document.getElementById(fid);
+    if (inp) inp.addEventListener('change', () => guardarLote(true));
   });
 
   const btnCerrar = document.getElementById('cerrarLote');
@@ -1897,7 +1925,7 @@ function renderLotes() {
       (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th><th></th></tr></thead><tbody>' +
         filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + resumenLote(f.g) + '</td>' +
           '<td>' + num(f.hoyG) + '</td>' +
-          '<td>' + (function() { const pp = picoPostura(f.hoyG, [f.g.id]); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
+          '<td>' + (function() { const pp = posturaPromedio([f.g.id], inicioSemana, hoy); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
           '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
           '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-hist-galpon="' + f.g.id + '" title="Historial del lote">' + ICONS.history + '</button><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
