@@ -1501,14 +1501,21 @@ function renderInicio() {
     const aves = avesPostura([reg.galponId]);
     const huevos = totalRegistro(reg);
     if (!aves || aves <= 0) return;
-    if (!porFecha[reg.fecha]) porFecha[reg.fecha] = { huevos: 0, aves: 0 };
+    if (!porFecha[reg.fecha]) porFecha[reg.fecha] = { huevos: 0, aves: 0, detalle: [], tam: {} };
     porFecha[reg.fecha].huevos += huevos;
     porFecha[reg.fecha].aves += aves;
+    SIZE_KEYS.concat(['rotos', 'sucios']).forEach(k => {
+      porFecha[reg.fecha].tam[k] = (porFecha[reg.fecha].tam[k] || 0) + (Number(reg[k]) || 0);
+    });
+    const gal = (state.galpones || []).find(x => x.id === reg.galponId);
+    porFecha[reg.fecha].detalle.push({ nombre: gal ? gal.nombre : 'Galpón', huevos: huevos, aves: aves });
   });
   const posturasDiarias = Object.entries(porFecha).map(([fecha, datos]) => ({
     fecha,
     huevos: datos.huevos,
     aves: datos.aves,
+    detalle: datos.detalle || [],
+    tam: datos.tam || {},
     porcentaje: datos.aves > 0 ? (datos.huevos / datos.aves) * 100 : null
   })).filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje));
   const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
@@ -1523,6 +1530,21 @@ function renderInicio() {
     ? 'promedio del mes · huevos ÷ gallinas'
     : (ppHist !== null ? 'promedio general · sin registros en ' + fmtMonthLabel(mes) : 'sin registros de producción');
   const ppExcede = posturaExcedida(ppValor);
+  const LBL_TAM = { pequenos: 'pequeños', medianos: 'medianos', grandes: 'grandes', extraGrandes: 'extra grandes', rotos: 'rotos', sucios: 'sucios' };
+  const compPicoTxt = picoDiario
+    ? SIZE_KEYS.concat(['rotos', 'sucios'])
+        .map(k => ({ k: k, v: Number(picoDiario.tam[k]) || 0 }))
+        .filter(o => o.v > 0)
+        .map(o => num(o.v) + ' ' + LBL_TAM[o.k])
+        .join(' + ')
+    : '';
+  const detallePicoTxt = picoDiario
+    ? 'El ' + fechaPicoPostura + ' se cargaron ' + compPicoTxt + ' = ' + num(picoDiario.huevos) + ' huevos'
+      + ((picoDiario.detalle && picoDiario.detalle.length > 1)
+          ? ' (' + picoDiario.detalle.map(d => '<b>' + escapeHtml(d.nombre) + '</b> ' + num(d.huevos) + ' · ' + num(d.aves) + ' aves').join(' + ') + ')'
+          : '')
+      + '.'
+    : '';
   const subPicoDiario = picoDiario
     ? 'mejor día: ' + fechaPicoPostura + ' · ' + num(picoDiario.huevos) + ' huevos / ' + num(picoDiario.aves) + ' gallinas'
     : 'sin registros en ' + fmtMonthLabel(mes);
@@ -1553,8 +1575,11 @@ function renderInicio() {
       statCard('Pico de postura diario', pctPostura(picoPostura), subPicoDiario, picoPostura === null || posturaExcedida(picoPostura) ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
+    ((detallePicoTxt && (posturaExcedida(picoPostura) || (picoDiario.detalle || []).length > 1))
+      ? '<p class="modalNote" style="margin:-8px 0 16px">' + detallePicoTxt + ' Fijate en <b>Producción</b> los registros del ' + fechaPicoPostura + ' por si hay alguno repetido.</p>'
+      : '') +
     ((posturaExcedida(picoPostura) || ppExcede)
-      ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay más huevos cargados que gallinas en el galpón. Revisá <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
+      ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay más huevos cargados que gallinas. Revisá <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
       : '') +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción vs. ventas</h3><span class="muted">Últimos 6 meses</span></div>' +
