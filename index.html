@@ -1457,95 +1457,81 @@ function toast(msg) {
 function renderInicio() {
   const el = document.getElementById('view-inicio');
   const hoy = todayStr();
-  const inicioSemana = startOfWeek(hoy);
-  const inicioMes = hoy.slice(0, 8) + '01';
+  const mes = state.inicioMes || mesActualKey();
+  state.inicioMes = mes;
+  const r = resumenCaja(mes);
+  const mesActual = mes === mesActualKey();
+  const mesFin = mesActual ? hoy : ultimoDiaMes(mes);
+  const pedidosPendientes = (state.pedidos || []).filter(pd => pd.estado === 'RESERVADO' && (pd.fechaNecesaria || pd.fechaReserva || pd.fecha || '').slice(0,7) === mes).length;
+  const regsMes = registrosProduccionMes(mes).filter(x => (x.fecha || '') <= mesFin);
+  const porDia = {};
+  regsMes.forEach(reg => { porDia[reg.fecha] = (porDia[reg.fecha] || 0) + clasificadosRegistro(reg); });
+  const aves = totalGallinas();
+  const picoPostura = aves > 0 && Object.keys(porDia).length
+    ? Math.max(...Object.values(porDia).map(total => total / aves * 100)) : null;
 
-  const aggHoy = agregados(filtrarRango(hoy, hoy));
-  const aggSemana = agregados(filtrarRango(inicioSemana, hoy));
-  const aggMes = agregados(filtrarRango(inicioMes, hoy));
-  const rotosPctHoy = aggHoy.total ? (aggHoy.rotos / aggHoy.total) * 100 : 0;
-  const arm = calcularArmadoMaples(aggHoy);
-
-  const desde30 = addDays(hoy, -29);
-  const regs30 = filtrarRango(desde30, hoy);
-  const dias30 = diasConDatos(regs30);
-  const promedioDiario = dias30 ? agregados(regs30).total / dias30 : 0;
-
-  const desdeSemPrev = addDays(hoy, -13);
-  const semActual = agregados(filtrarRango(addDays(hoy, -6), hoy)).total;
-  const semPrevia = agregados(filtrarRango(desdeSemPrev, addDays(hoy, -7))).total;
-  let tendTexto = 'Sin datos suficientes todavía';
-  let tendIcon = 'flat';
-  if (semPrevia > 0) {
-    const cambio = ((semActual - semPrevia) / semPrevia) * 100;
-    if (Math.abs(cambio) < 2) { tendTexto = 'Producción estable esta semana'; tendIcon = 'flat'; }
-    else if (cambio > 0) { tendTexto = 'Subió ' + pct(cambio) + ' vs. la semana anterior'; tendIcon = 'up'; }
-    else { tendTexto = 'Bajó ' + pct(Math.abs(cambio)) + ' vs. la semana anterior'; tendIcon = 'down'; }
-  }
-
-  const alerts = computeAlerts();
-  const rotosClase = rotosPctHoy > 6 ? 'danger' : rotosPctHoy > 3 ? 'warn' : 'ok';
+  const desde = shiftMes(mes, -5);
+  const meses = [];
+  for (let i = 0; i < 6; i++) meses.push(shiftMes(desde, i));
+  const produccionSerie = meses.map(mk => maplesProducidosMes(mk));
+  const ventasSerie = meses.map(mk => resumenCaja(mk).maplesVendidos);
 
   el.innerHTML =
     '<section class="hero">' +
-      '<div class="hero__top"><span class="hero__eyebrow">' + fmtDateLong(hoy) + '</span><span class="hero__egg">' + ICONS.egg + '</span></div>' +
-      '<div class="hero__big">' + num(aggHoy.total) + '</div>' +
-      '<div class="hero__label">huevos recolectados hoy</div>' +
-      '<div class="hero__row"><span class="hero__chip">' + ICONS[tendIcon] + ' ' + tendTexto + '</span></div>' +
+      '<div class="hero__top"><span class="hero__eyebrow">Resumen del negocio</span><span class="hero__egg">' + ICONS.egg + '</span></div>' +
+      '<div class="hero__big">' + money(r.ingresos) + '</div>' +
+      '<div class="hero__label">ingresos por ventas · ' + fmtMonthLabel(mes) + '</div>' +
+      '<div class="hero__row"><span class="hero__chip">' + num(r.maplesVendidos) + ' maples vendidos</span></div>' +
     '</section>' +
-
-    (alerts.length ? '<section class="alerts">' + alerts.map(a =>
-      '<div class="alertCard alertCard--' + a.nivel + '">' + ICONS.alert + '<span>' + a.texto + '</span></div>'
-    ).join('') + '</section>' : '') +
-
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Período</h3></div>' +
+      '<label class="field" style="margin:0"><span>Consultar mes</span><input type="month" id="inicio_mes" value="' + mes + '"></label>' +
+    '</section>' +
     '<section class="statGrid">' +
-      statCard('Semana', num(Math.floor(aggSemana.total / 30)) + (aggSemana.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggSemana.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
-      statCard('Mes', num(Math.floor(aggMes.total / 30)) + (aggMes.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggMes.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
-      statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
-      statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
-      (function() { const d0 = primerRegistroFecha(null); const pp = d0 ? posturaPromedio(null, d0, hoy, gallinasRecuentoReciente()) : null; return pp !== null ? statCard('Pico de postura', pct(pp), 'promedio desde el 1er registro', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
+      statCard('Maples vendidos', num(r.maplesVendidos), 'pedidos de huevos entregados', 'ok') +
+      statCard('Ingresos por ventas', money(r.ingresos), 'huevos y otros productos', 'ok') +
+      statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
+      statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
+      statCard('Pico de postura', picoPostura === null ? '—' : pct(picoPostura), 'máximo diario del mes', picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
+      statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Producción vs. ventas</h3><span class="muted">Últimos 6 meses</span></div>' +
+      '<canvas id="chartInicioProduccionVentas" height="210"></canvas>' +
+      '<p class="modalNote">Compará cuántos maples aptos produjo la granja con cuántos maples se entregaron a clientes.</p>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Resultado del período</h3></div>' +
+      '<div class="tableWrap"><table class="table"><tbody>' +
+        '<tr><td>Ingresos por ventas</td><td style="text-align:right"><strong>' + money(r.ingresos) + '</strong></td></tr>' +
+        '<tr><td>Gastos registrados</td><td style="text-align:right">' + money(r.gastosTotal) + '</td></tr>' +
+        '<tr><td>Maples producidos</td><td style="text-align:right">' + num(r.producidos) + '</td></tr>' +
+        '<tr><td>Maples vendidos</td><td style="text-align:right">' + num(r.maplesVendidos) + '</td></tr>' +
+      '</tbody></table></div>' +
+    '</section>';
 
-    (aggHoy.total ? (
-      '<section class="panel">' +
-        '<div class="panel__head"><h3>Armado de maples de hoy</h3></div>' +
-        '<div class="formRow2" style="margin-bottom:10px;">' +
-          '<label class="field"><span>Maples a armar</span><input type="number" min="1" max="999" id="mp_maples" value="' + arm.maples + '"></label>' +
-        '</div>' +
-        '<div class="tableWrap"><table class="table"><thead><tr><th>En cada maple</th><th>Lugares</th><th>Tenés hoy</th></tr></thead><tbody>' +
-          '<tr><td>Del 1 · Súper grandes</td><td><strong>' + num(arm.unoPorMaple) + '</strong></td><td><span class="muted">' + num(arm.dispUno) + '</span></td></tr>' +
-          '<tr><td>Del 2 · Grandes</td><td><strong>' + num(arm.dosPorMaple) + '</strong></td><td><span class="muted">' + num(arm.dispDos) + '</span></td></tr>' +
-          '<tr><td>Del 3 · Medianos</td><td><strong>' + num(arm.tresPorMaple) + '</strong></td><td><span class="muted">' + num(arm.dispTres) + '</span></td></tr>' +
-          '<tr><td>Total por maple</td><td><strong>' + num(arm.unoPorMaple + arm.dosPorMaple + arm.tresPorMaple) + '</strong></td><td></td></tr>' +
-        '</tbody></table></div>' +
-        '<p class="modalNote" style="margin-top:8px">Con ' + num(arm.maples) + ' maples usás ' + num(arm.ponerUno) + ' del 1, ' + num(arm.ponerDos) + ' del 2 y ' + num(arm.ponerTres) + ' del 3 (total ' + num(arm.totalLugares) + ' lugares).</p>' +
-        (arm.tresPorMaple < 0 ? '<p class="modalNote" style="margin-top:6px;color:var(--warn)">Los del 1 y del 2 ya pasan de 30 por maple: no entra el del 3. Probá armar más maples.</p>' : '') +
-        (arm.tresPorMaple > 0 && arm.sobraTres < 0 ? '<p class="modalNote" style="margin-top:6px;color:var(--warn)">Te faltan ' + num(-arm.sobraTres) + ' del 3 (medianos) para completar los lugares.</p>' : '') +
-        (arm.sobraUno > 0 || arm.sobraDos > 0 || (arm.tresPorMaple > 0 && arm.sobraTres > 0) ?
-          '<p class="modalNote" style="margin-top:6px">Te sobran: ' + num(Math.max(0, arm.sobraUno)) + ' del 1, ' + num(Math.max(0, arm.sobraDos)) + ' del 2' + (arm.tresPorMaple > 0 ? ' y ' + num(Math.max(0, arm.sobraTres)) + ' del 3' : '') + '.</p>' : '') +
-      '</section>' +
-      '<section class="panel">' +
-        '<div class="panel__head"><h3>Clasificación de hoy</h3></div>' +
-        '<canvas id="chartHoyBarras" height="180"></canvas>' +
-      '</section>'
-    ) : (
-      '<section class="panel">' +
-        '<div class="panel__head"><h3>Producción de hoy</h3></div>' +
-        emptyState('Todavía no cargaste producción hoy.', 'Registrar ahora') +
-      '</section>'
-    ));
-
-  try { if (aggHoy.total) { drawBarPorTamano('chartHoyBarras', aggHoy); } } catch(chartErr) { console.warn('Chart error:', chartErr); }
-
-  el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => setTab(b.getAttribute('data-goto'))));
-
-  const mpM = document.getElementById('mp_maples');
-  const _updMaples = () => {
-    state.maplesConfig.maples = Math.max(1, Math.floor(Number(mpM.value) || 1));
-    guardarMaplesConfig();
+  const inputMes = document.getElementById('inicio_mes');
+  if (inputMes) inputMes.addEventListener('change', () => {
+    if (!inputMes.value) return;
+    state.inicioMes = inputMes.value;
     renderInicio();
-  };
-  if (mpM) mpM.addEventListener('change', _updMaples);
+  });
+  const canvas = document.getElementById('chartInicioProduccionVentas');
+  if (canvas && typeof Chart !== 'undefined') {
+    destroyChart('chartInicioProduccionVentas');
+    state.charts['chartInicioProduccionVentas'] = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: meses.map(fmtMonthLabel), datasets: [
+        { label: 'Producidos', data: produccionSerie, backgroundColor: '#C8956A', borderRadius: 6 },
+        { label: 'Vendidos', data: ventasSerie, backgroundColor: '#7A9B6D', borderRadius: 6 }
+      ] },
+      options: { responsive: true, maintainAspectRatio: true, animation: false,
+        plugins: { legend: { display: true, labels: { color: '#94A3B8', font: baseFont() } } },
+        scales: { x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#94A3B8', font: baseFont() }, grid: { color: 'rgba(255,255,255,0.06)' } } }
+      }
+    });
+  }
 }
 
 function statCard(label, value, sub, tone) {
