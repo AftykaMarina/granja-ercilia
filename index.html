@@ -1261,8 +1261,13 @@ function posturaPromedio(galponIds, desde, hasta, avesManual) {
   if (!aves || aves <= 0) return null;
   const desdeReal = desde || primerRegistroFecha(galponIds) || todayStr();
   const hastaReal = hasta || todayStr();
-  const regs = state.registros.filter(r =>
-    (!galponIds || galponIds.indexOf(r.galponId) !== -1) && r.fecha >= desdeReal && r.fecha <= hastaReal);
+  const regs = state.registros.filter(r => {
+    if (galponIds && galponIds.indexOf(r.galponId) === -1) return false;
+    if (r.fecha < desdeReal || r.fecha > hastaReal) return false;
+    const galR = (state.galpones || []).find(x => x.id === r.galponId);
+    if (galR && !galponPone(galR)) return false; // los pollitos no ponen
+    return true;
+  });
   if (!regs.length) return null;
   const porDia = {};
   regs.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + totalRegistro(r); });
@@ -1281,12 +1286,14 @@ function avesGalponPostura(g) {
   const ini = Number(g.cantidadInicial) || 0;
   return Math.max(cap, ini);
 }
+function galponPone(g) { return !(g && g.noPone); }
 function avesPostura(galponIds) {
-  const lista = galponIds
-    ? (state.galpones || []).filter(g => galponIds.indexOf(g.id) !== -1)
-    : (state.galpones || []);
-  const t = lista.reduce((s2, g) => s2 + avesGalponPostura(g), 0);
-  return t || totalGallinas(galponIds);
+  const lista = (state.galpones || []).filter(g =>
+    galponPone(g) && (!galponIds || galponIds.indexOf(g.id) !== -1));
+  return lista.reduce((s2, g) => s2 + avesGalponPostura(g), 0);
+}
+function galponesNoPonen() {
+  return (state.galpones || []).filter(g => !galponPone(g));
 }
 /* La postura no puede pasar de 100%: si da más, es dato mal cargado y se muestra el tope. */
 function pctPostura(v) { return v === null || v === undefined ? '—' : pct(Math.min(100, Math.max(0, v))); }
@@ -1299,8 +1306,11 @@ function gallinasRecuentoReciente() {
       ((b.creadoEn || 0) - (a.creadoEn || 0))
     )[0];
     if (ult && ult.galponId) {
-      const cap = avesPostura([ult.galponId]);
-      if (cap > 0) return cap;
+      const gUlt = (state.galpones || []).find(x => x.id === ult.galponId);
+      if (galponPone(gUlt)) {
+        const cap = avesPostura([ult.galponId]);
+        if (cap > 0) return cap;
+      }
     }
   }
   return avesPostura() || 0;
@@ -1474,6 +1484,37 @@ function toast(msg) {
 }
 
 /* ---------- Render: Inicio (dashboard) ---------- */
+/* Arma la postura por fecha a partir de registros: un solo registro por fecha+galpón
+   (el último cargado), se saltean los galpones de pollitos y se calcula huevos ÷ aves. */
+function posturasPorFecha(regs) {
+  const ultimo = {};
+  (regs || []).forEach(reg => {
+    if (!reg.fecha || !reg.galponId) return;
+    const clave = reg.fecha + '|' + reg.galponId;
+    const anterior = ultimo[clave];
+    if (!anterior || (Number(reg.creadoEn) || 0) >= (Number(anterior.creadoEn) || 0)) ultimo[clave] = reg;
+  });
+  const porFecha = {};
+  Object.values(ultimo).forEach(reg => {
+    const gal = (state.galpones || []).find(x => x.id === reg.galponId);
+    if (gal && !galponPone(gal)) return;
+    const aves = avesPostura([reg.galponId]);
+    const huevos = totalRegistro(reg);
+    if (!aves || aves <= 0) return;
+    if (!porFecha[reg.fecha]) porFecha[reg.fecha] = { fecha: reg.fecha, huevos: 0, aves: 0, detalle: [], tam: {} };
+    const d = porFecha[reg.fecha];
+    d.huevos += huevos;
+    d.aves += aves;
+    SIZE_KEYS.concat(['rotos', 'sucios']).forEach(k => { d.tam[k] = (d.tam[k] || 0) + (Number(reg[k]) || 0); });
+    d.detalle.push({ nombre: gal ? gal.nombre : 'Galpón', huevos: huevos, aves: aves });
+  });
+  return Object.values(porFecha)
+    .map(d => ({ fecha: d.fecha, huevos: d.huevos, aves: d.aves, detalle: d.detalle, tam: d.tam,
+                 porcentaje: d.aves > 0 ? (d.huevos / d.aves) * 100 : null }))
+    .filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje))
+    .sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+}
+
 function renderInicio() {
   const el = document.getElementById('view-inicio');
   const hoy = todayStr();
@@ -1484,70 +1525,31 @@ function renderInicio() {
   const mesFin = mesActual ? hoy : ultimoDiaMes(mes);
   const pedidosPendientes = (state.pedidos || []).filter(pd => pd.estado === 'RESERVADO' && (pd.fechaNecesaria || pd.fechaReserva || pd.fecha || '').slice(0,7) === mes).length;
   const regsMes = registrosProduccionMes(mes).filter(x => (x.fecha || '') <= mesFin);
-  // Pico de postura diario: huevos recolectados / gallinas x 100.
-  // Por cada fecha y galpón se toma un solo registro (el último cargado),
-  // para evitar duplicar una carga anterior. Editar el registro actualiza el cálculo.
-  const ultimoRegistroDiaGalpon = {};
-  regsMes.forEach(reg => {
-    if (!reg.fecha || !reg.galponId) return;
-    const clave = reg.fecha + '|' + reg.galponId;
-    const anterior = ultimoRegistroDiaGalpon[clave];
-    if (!anterior || (Number(reg.creadoEn) || 0) >= (Number(anterior.creadoEn) || 0)) {
-      ultimoRegistroDiaGalpon[clave] = reg;
-    }
-  });
-  const porFecha = {};
-  Object.values(ultimoRegistroDiaGalpon).forEach(reg => {
-    const aves = avesPostura([reg.galponId]);
-    const huevos = totalRegistro(reg);
-    if (!aves || aves <= 0) return;
-    if (!porFecha[reg.fecha]) porFecha[reg.fecha] = { huevos: 0, aves: 0, detalle: [], tam: {} };
-    porFecha[reg.fecha].huevos += huevos;
-    porFecha[reg.fecha].aves += aves;
-    SIZE_KEYS.concat(['rotos', 'sucios']).forEach(k => {
-      porFecha[reg.fecha].tam[k] = (porFecha[reg.fecha].tam[k] || 0) + (Number(reg[k]) || 0);
-    });
-    const gal = (state.galpones || []).find(x => x.id === reg.galponId);
-    porFecha[reg.fecha].detalle.push({ nombre: gal ? gal.nombre : 'Galpón', huevos: huevos, aves: aves });
-  });
-  const posturasDiarias = Object.entries(porFecha).map(([fecha, datos]) => ({
-    fecha,
-    huevos: datos.huevos,
-    aves: datos.aves,
-    detalle: datos.detalle || [],
-    tam: datos.tam || {},
-    porcentaje: datos.aves > 0 ? (datos.huevos / datos.aves) * 100 : null
-  })).filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje));
-  const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
-  const picoPostura = picoDiario ? picoDiario.porcentaje : null;
-  const fechaPicoPostura = picoDiario ? fmtDateShort(picoDiario.fecha) : '';
-  /* Postura promedio: huevos por día (solo días con registro) ÷ gallinas.
-     Si el mes consultado no tiene registros, se muestra el promedio histórico para no dejar el dato vacío. */
-  const ppMes = posturaPromedio(null, mes + '-01', mesFin, gallinasRecuentoReciente());
-  const ppHist = ppMes === null ? posturaPromedio(null, null, null, gallinasRecuentoReciente()) : null;
-  const ppValor = ppMes !== null ? ppMes : ppHist;
-  const ppSub = ppMes !== null
-    ? 'promedio del mes · huevos ÷ gallinas'
-    : (ppHist !== null ? 'promedio general · sin registros en ' + fmtMonthLabel(mes) : 'sin registros de producción');
-  const ppExcede = posturaExcedida(ppValor);
-  const LBL_TAM = { pequenos: 'pequeños', medianos: 'medianos', grandes: 'grandes', extraGrandes: 'extra grandes', rotos: 'rotos', sucios: 'sucios' };
-  const compPicoTxt = picoDiario
-    ? SIZE_KEYS.concat(['rotos', 'sucios'])
-        .map(k => ({ k: k, v: Number(picoDiario.tam[k]) || 0 }))
-        .filter(o => o.v > 0)
-        .map(o => num(o.v) + ' ' + LBL_TAM[o.k])
-        .join(' + ')
+  /* Postura del mes: un porcentaje por día con registro (huevos ÷ gallinas ponedoras). */
+  const posturas = posturasPorFecha(regsMes);
+  const diasPostura = posturas.filter(d => d.porcentaje !== null);
+  const promPct = diasPostura.length
+    ? diasPostura.reduce((s2, d) => s2 + d.porcentaje, 0) / diasPostura.length
+    : null;
+  const promExcede = posturaExcedida(promPct);
+  /* Postura de hoy: solo si ya está cargada la recolección de hoy. */
+  const postHoy = posturasPorFecha((state.registros || []).filter(r => r.fecha === hoy))[0] || null;
+  const pctHoy = postHoy ? postHoy.porcentaje : null;
+  const subHoy = postHoy
+    ? fmtDateShort(hoy) + ' · ' + num(postHoy.huevos) + ' huevos / ' + num(postHoy.aves) + ' gallinas'
+    : 'todav\u00eda no cargaste la recolecci\u00f3n de hoy';
+  const subProm = promPct !== null
+    ? num(diasPostura.length) + (diasPostura.length === 1 ? ' d\u00eda cargado' : ' d\u00edas cargados') + ' en ' + fmtMonthLabel(mes)
+    : 'sin registros en ' + fmtMonthLabel(mes);
+  const LBL_TAM = { pequenos: 'peque\u00f1os', medianos: 'medianos', grandes: 'grandes', extraGrandes: 'extra grandes', rotos: 'rotos', sucios: 'sucios' };
+  const compHoyTxt = postHoy
+    ? SIZE_KEYS.concat(['rotos', 'sucios']).map(k => ({ k: k, v: Number(postHoy.tam[k]) || 0 })).filter(o => o.v > 0).map(o => num(o.v) + ' ' + LBL_TAM[o.k]).join(' + ')
     : '';
-  const detallePicoTxt = picoDiario
-    ? 'El ' + fechaPicoPostura + ' se cargaron ' + compPicoTxt + ' = ' + num(picoDiario.huevos) + ' huevos'
-      + ((picoDiario.detalle && picoDiario.detalle.length > 1)
-          ? ' (' + picoDiario.detalle.map(d => '<b>' + escapeHtml(d.nombre) + '</b> ' + num(d.huevos) + ' · ' + num(d.aves) + ' aves').join(' + ') + ')'
-          : '')
+  const detalleHoyTxt = postHoy
+    ? 'Hoy se cargaron ' + compHoyTxt + ' = ' + num(postHoy.huevos) + ' huevos'
+      + ((postHoy.detalle && postHoy.detalle.length > 1) ? ' (' + postHoy.detalle.map(d => '<b>' + escapeHtml(d.nombre) + '</b> ' + num(d.huevos) + ' \u00b7 ' + num(d.aves) + ' aves').join(' + ') + ')' : '')
       + '.'
     : '';
-  const subPicoDiario = picoDiario
-    ? 'mejor día: ' + fechaPicoPostura + ' · ' + num(picoDiario.huevos) + ' huevos / ' + num(picoDiario.aves) + ' gallinas'
-    : 'sin registros en ' + fmtMonthLabel(mes);
 
   const desde = shiftMes(mes, -5);
   const meses = [];
@@ -1571,15 +1573,18 @@ function renderInicio() {
       statCard('Ingresos por ventas', money(r.ingresos), 'huevos y otros productos', 'ok') +
       statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
       statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
-      statCard('Pico de postura promedio', pctPostura(ppValor), ppSub, ppValor === null || posturaExcedida(ppValor) ? 'warn' : ppValor >= 80 ? 'ok' : ppValor >= 60 ? 'warn' : 'danger') +
-      statCard('Pico de postura diario', pctPostura(picoPostura), subPicoDiario, picoPostura === null || posturaExcedida(picoPostura) ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura de hoy', pctPostura(pctHoy), subHoy, pctHoy === null || posturaExcedida(pctHoy) ? 'warn' : pctHoy >= 80 ? 'ok' : pctHoy >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura promedio', pctPostura(promPct), subProm, promPct === null || promExcede ? 'warn' : promPct >= 80 ? 'ok' : promPct >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
-    ((detallePicoTxt && (posturaExcedida(picoPostura) || (picoDiario.detalle || []).length > 1))
-      ? '<p class="modalNote" style="margin:-8px 0 16px">' + detallePicoTxt + ' Fijate en <b>Producción</b> los registros del ' + fechaPicoPostura + ' por si hay alguno repetido.</p>'
+    (galponesNoPonen().length
+      ? '<p class="modalNote" style="margin:-8px 0 12px">Postura calculada solo con gallinas ponedoras. No se cuentan: <b>' + galponesNoPonen().map(g => escapeHtml(g.nombre)).join(', ') + '</b> (' + num(galponesNoPonen().reduce((s2, g) => s2 + avesGalpon(g), 0)) + ' aves en cría).</p>'
       : '') +
-    ((posturaExcedida(picoPostura) || ppExcede)
-      ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay más huevos cargados que gallinas. Revisá <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
+    ((detalleHoyTxt && (posturaExcedida(pctHoy) || (postHoy.detalle || []).length > 1))
+      ? '<p class="modalNote" style="margin:-8px 0 12px">' + detalleHoyTxt + ' Fijate en <b>Producci\u00f3n</b> los registros de hoy por si hay alguno repetido.</p>'
+      : '') +
+    ((posturaExcedida(pctHoy) || promExcede)
+      ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay m\u00e1s huevos cargados que gallinas ponedoras. Revis\u00e1 <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
       : '') +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción vs. ventas</h3><span class="muted">Últimos 6 meses</span></div>' +
@@ -1870,6 +1875,11 @@ function abrirEditarGalponModal(id) {
       '<form id="formEditarGalpon" class="form">' +
         '<label class="field"><span>Nombre</span><input type="text" id="eg_nombre" value="' + escapeHtml(g.nombre || '') + '" required></label>' +
         '<label class="field"><span>Capacidad (aves)</span><input type="number" min="0" id="eg_capacidad" value="' + (g.capacidad || 0) + '"></label>' +
+        '<label class="field"><span>¿Qué hay en este galpón?</span><select id="eg_tipo">' +
+          '<option value="PONEDORAS"' + (galponPone(g) ? ' selected' : '') + '>Gallinas ponedoras</option>' +
+          '<option value="POLLITOS"' + (!galponPone(g) ? ' selected' : '') + '>Pollitos / recría (todavía no ponen)</option>' +
+        '</select></label>' +
+        '<p class="modalNote" style="margin:0">Los galpones de pollitos no se cuentan en el porcentaje de postura, porque no ponen huevos.</p>' +
         '<button type="submit" class="btn btn--primary">Guardar cambios</button>' +
       '</form>' +
     '</div>';
@@ -1880,7 +1890,11 @@ function abrirEditarGalponModal(id) {
     const nombre = document.getElementById('eg_nombre').value.trim();
     if (!nombre) { toast('Pon\u00e9 un nombre.'); return; }
     try {
-      await actualizarGalpon(id, { nombre, capacidad: Number(document.getElementById('eg_capacidad').value) || 0 });
+      await actualizarGalpon(id, {
+        nombre,
+        capacidad: Number(document.getElementById('eg_capacidad').value) || 0,
+        noPone: document.getElementById('eg_tipo').value === 'POLLITOS'
+      });
       toast('Galp\u00f3n modificado \u2713');
       modal.classList.remove('modal--open');
     } catch (err) { toast('No se pudo guardar: ' + err.message); }
@@ -2128,15 +2142,19 @@ function renderLotes() {
           '<label class="field"><span>Nombre</span><input type="text" id="g_nombre" placeholder="Ej: Galpón 3" required></label>' +
           '<label class="field"><span>Capacidad (aves)</span><input type="number" min="0" id="g_capacidad" placeholder="Opcional"></label>' +
         '</div>' +
+        '<label class="field"><span>¿Qué hay en este galpón?</span><select id="g_tipo">' +
+          '<option value="PONEDORAS">Gallinas ponedoras</option>' +
+          '<option value="POLLITOS">Pollitos / recría (todavía no ponen)</option>' +
+        '</select></label>' +
         '<button type="submit" class="btn btn--primary">Agregar galpón</button>' +
       '</form>' +
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
       (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Cant. aves</th><th>Pico postura</th><th>Sem. de vida</th><th></th></tr></thead><tbody>' +
-        filas.map(f => '<tr><td><strong>' + escapeHtml(f.g.nombre) + '</strong></td>' +
+        filas.map(f => '<tr><td><strong>' + escapeHtml(f.g.nombre) + '</strong>' + (f.g.noPone ? ' <span class="chip chip--on" style="flex:none;font-size:10px;padding:2px 8px">Pollitos</span>' : '') + '</td>' +
           '<td>' + ((avesGalpon(f.g) > 0) ? num(avesGalpon(f.g)) : '<span class="muted">—</span>') + '</td>' +
-          '<td>' + (function() { const d0 = primerRegistroFecha([f.g.id]); const pp = d0 ? posturaPromedio([f.g.id], d0, hoy) : null; return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
+          '<td>' + (!galponPone(f.g) ? '<span class="muted">no ponen</span>' : (function() { const d0 = primerRegistroFecha([f.g.id]); const pp = d0 ? posturaPromedio([f.g.id], d0, hoy) : null; return pp !== null ? '<strong>' + pctPostura(pp) + '</strong>' : '—'; })()) + '</td>' +
           '<td>' + (function() { const e = edadLote(f.g); return e ? ('<strong>' + e.semanas + '</strong> sem') : '<span class="muted">—</span>'; })() + '</td>' +
           '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-hist-galpon="' + f.g.id + '" title="Historial del lote">' + ICONS.history + '</button><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
@@ -2147,7 +2165,7 @@ function renderLotes() {
     e.preventDefault();
     const nombre = document.getElementById('g_nombre').value.trim();
     if (!nombre) return;
-    const nuevoGalpon = { id: 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), nombre, capacidad: Number(document.getElementById('g_capacidad').value) || 0 };
+    const nuevoGalpon = { id: 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), nombre, capacidad: Number(document.getElementById('g_capacidad').value) || 0, noPone: document.getElementById('g_tipo').value === 'POLLITOS' };
     await crearGalpon(nuevoGalpon);
     toast('Galpón agregado ✓');
   });
