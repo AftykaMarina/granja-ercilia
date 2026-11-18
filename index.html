@@ -2904,9 +2904,15 @@ function precioSugerido(maples) {
   if (n === 2) return Number(p.dos) || 0;
   return n * (Number(p.tresMas) || 0);
 }
+function registrosProduccionMes(mes) {
+  return (state.registros || []).filter(r => (r.fecha || '').indexOf(mes) === 0);
+}
+function huevosAptosMes(mes) {
+  return registrosProduccionMes(mes).reduce((s, r) => s + clasificadosRegistro(r), 0);
+}
 function maplesProducidosMes(mes) {
-  const regs = state.registros.filter(r => (r.fecha || '').indexOf(mes) === 0);
-  return regs.reduce((s, r) => s + totalRegistro(r), 0) / 30;
+  // Solo huevos clasificados por tamaño: rotos y sucios no se consideran vendibles.
+  return huevosAptosMes(mes) / 30;
 }
 function resumenCaja(mes) {
   /* Los ingresos salen solo de Pedidos: cada pedido entregado con su precio. */
@@ -2916,11 +2922,17 @@ function resumenCaja(mes) {
   const pedidosSinPrecio = pedidosMes.filter(pd => !(Number(pd.precioTotal) > 0));
   const ingresoVentas = 0;
   const ingresoPedidos = pedidos.reduce((s, pd) => s + (Number(pd.precioTotal) || 0), 0);
+  const ingresoPedidosHuevos = pedidos.filter(pd => pd.producto === 'HUEVOS').reduce((s, pd) => s + (Number(pd.precioTotal) || 0), 0);
   const maplesVentas = 0;
   const maplesPedidos = pedidosMes.reduce((s, pd) => s + maplesDePedido(pd), 0);
   const maplesVendidos = maplesVentas + maplesPedidos;
   const producidos = maplesProducidosMes(mes);
-  const baseMaple = maplesVendidos > 0 ? maplesVendidos : producidos;
+  const huevosAptos = huevosAptosMes(mes);
+  const regsProduccion = registrosProduccionMes(mes);
+  const huevosRotos = regsProduccion.reduce((s, r) => s + (Number(r.rotos) || 0), 0);
+  const huevosSucios = regsProduccion.reduce((s, r) => s + (Number(r.sucios) || 0), 0);
+  // El costo de producir se divide por lo producido y apto para venta, no por lo vendido.
+  const baseMaple = producidos;
   const gastosMes = (state.gastos || []).filter(g => {
     const gm = (g.fecha || '').slice(0, 7);
     if (!gm) return false;
@@ -2945,16 +2957,34 @@ function resumenCaja(mes) {
   const ingresos = ingresoVentas + ingresoPedidos;
   const ganancia = ingresos - gastosTotal;
   const costoMaple = (baseMaple > 0 && gastosTotal > 0) ? gastosTotal / baseMaple : null;
-  const precioProm = maplesVendidos > 0 ? ingresos / maplesVendidos : null;
+  const costoHuevo = (huevosAptos > 0 && gastosTotal > 0) ? gastosTotal / huevosAptos : null;
+  const costoDocena = costoHuevo !== null ? costoHuevo * 12 : null;
+  const costoMediaDocena = costoHuevo !== null ? costoHuevo * 6 : null;
+  const gastoAlimento = gastosMes.filter(g => g.categoria === 'Alimento').reduce((s, g) => s + (Number(g.monto) || 0) * (g.tipo === 'MAPLE' ? baseMaple : 1), 0);
+  const costoAlimentoHuevo = huevosAptos > 0 ? gastoAlimento / huevosAptos : null;
+  const aves = totalGallinas();
+  const diasProduccion = diasConDatos(regsProduccion);
+  const postura = (aves > 0 && diasProduccion > 0) ? (huevosAptos / (aves * diasProduccion)) * 100 : null;
+  const porcentajeDescarte = (huevosAptos + huevosRotos + huevosSucios) > 0 ? ((huevosRotos + huevosSucios) / (huevosAptos + huevosRotos + huevosSucios)) * 100 : null;
+  const precioProm = maplesVendidos > 0 ? ingresoPedidosHuevos / maplesVendidos : null;
   const gananciaMaple = (costoMaple !== null && precioProm !== null) ? precioProm - costoMaple : null;
-  const margen = (ingresos > 0 && gastosTotal > 0) ? (ganancia / ingresos) * 100 : null;
-  return { mes: mes, ventas: ventas, pedidos: pedidos, pedidosSinPrecio: pedidosSinPrecio, ingresoVentas: ingresoVentas, ingresoPedidos: ingresoPedidos,
+  const margen = ingresos > 0 ? (ganancia / ingresos) * 100 : null;
+  const precioReferencia = precioProm !== null ? precioProm : (Number((state.precios || {}).uno) || 0);
+  const costoVariableMaple = gastosVariableUnit;
+  const margenContribucion = precioReferencia - costoVariableMaple;
+  const puntoEquilibrio = margenContribucion > 0 ? Math.ceil(gastosFijos / margenContribucion) : null;
+  const gananciaDocena = (precioProm !== null && costoDocena !== null) ? (precioProm / 30 * 12) - costoDocena : null;
+  const gananciaMediaDocena = (precioProm !== null && costoMediaDocena !== null) ? (precioProm / 30 * 6) - costoMediaDocena : null;
+  return { mes: mes, ventas: ventas, pedidos: pedidos, pedidosSinPrecio: pedidosSinPrecio, ingresoVentas: ingresoVentas, ingresoPedidos: ingresoPedidos, ingresoPedidosHuevos: ingresoPedidosHuevos,
     ingresos: ingresos, maplesVentas: maplesVentas, maplesPedidos: maplesPedidos, maplesVendidos: maplesVendidos,
-    producidos: producidos, baseMaple: baseMaple, gastosMes: gastosMes, gastosFijos: gastosFijos,
+    producidos: producidos, huevosAptos: huevosAptos, huevosRotos: huevosRotos, huevosSucios: huevosSucios, baseMaple: baseMaple, gastosMes: gastosMes, gastosFijos: gastosFijos,
     gastosFijosMes: gastosFijosMes, gastosVariableUnit: gastosVariableUnit, gastosVariable: gastosVariable,
     gastosTotal: gastosTotal, gastosCargadosMes: gastosCargadosMes, diasMes: diasMes,
     diasTranscurridos: diasTranscurridos, esMesEnCurso: esMesEnCurso, factorDias: factorDias,
-    ganancia: ganancia, costoMaple: costoMaple, precioProm: precioProm, gananciaMaple: gananciaMaple, margen: margen };
+    ganancia: ganancia, costoMaple: costoMaple, costoHuevo: costoHuevo, costoDocena: costoDocena, costoMediaDocena: costoMediaDocena,
+    gastoAlimento: gastoAlimento, costoAlimentoHuevo: costoAlimentoHuevo, aves: aves, diasProduccion: diasProduccion, postura: postura,
+    porcentajeDescarte: porcentajeDescarte, precioProm: precioProm, gananciaMaple: gananciaMaple, margen: margen,
+    puntoEquilibrio: puntoEquilibrio, gananciaDocena: gananciaDocena, gananciaMediaDocena: gananciaMediaDocena };
 }
 
 function renderCaja() {
@@ -3020,26 +3050,52 @@ function renderCaja() {
     '</section>' +
 
     '<section class="cajaHero">' +
-      '<div class="cajaHero__label">Ganancia de ' + mesLabel + '</div>' +
+      '<div class="cajaHero__label">Resultado del período · ' + mesLabel + '</div>' +
       '<div class="cajaHero__big ' + (r.ganancia >= 0 ? 'pos' : 'neg') + '">' + (hayDatos ? money(r.ganancia) : '$ 0') + '</div>' +
-      '<div class="cajaHero__sub">' + (hayDatos ? 'Margen real: ' + (r.margen !== null ? pct(r.margen) : '—') : 'Cargá pedidos entregados y gastos para ver la ganancia real') + '</div>' +
+      '<div class="cajaHero__sub">' + (hayDatos ? 'Resultado operativo · Margen: ' + (r.margen !== null ? pct(r.margen) : '—') : 'Cargá producción, pedidos y gastos para calcular el resultado') + '</div>' +
       '<div class="cajaHero__row">' +
         '<div class="cajaHero__item"><span>Ingresos</span><strong>' + money(r.ingresos) + '</strong></div>' +
         '<div class="cajaHero__item"><span>Gastos</span><strong>' + money(r.gastosTotal) + '</strong></div>' +
-        '<div class="cajaHero__item"><span>Costo x maple</span><strong>' + (r.costoMaple !== null ? money(r.costoMaple) : '—') + '</strong></div>' +
+        '<div class="cajaHero__item"><span>Maples aptos producidos</span><strong>' + num(Math.round(r.producidos * 10) / 10) + '</strong></div>' +
       '</div>' +
-      (r.factorDias < 1 && r.gastosFijosMes > 0 ? '<div class="cajaHero__sub" style="margin-top:10px;line-height:1.5">Mes en curso: de los gastos fijos contamos ' + r.diasTranscurridos + ' de ' + r.diasMes + ' días. Al terminar el mes se cuenta el total.</div>' : '') +
     '</section>' +
 
     '<section class="panel">' +
-      '<div class="panel__head"><h3>Números del mes</h3></div>' +
+      '<div class="panel__head"><h3>Costo real de producción</h3></div>' +
+      '<p class="cajaNota" style="margin:0 0 10px">Se calcula sobre los huevos clasificados por tamaño. Los rotos y sucios quedan fuera de la cantidad vendible.</p>' +
       '<div class="cajaGrid">' +
-        '<div class="cajaMini"><span>Maples vendidos</span><strong>' + (Math.round(r.maplesVendidos * 10) / 10) + '</strong></div>' +
-        '<div class="cajaMini"><span>Maples producidos</span><strong>' + (Math.round(r.producidos * 10) / 10) + '</strong></div>' +
-        '<div class="cajaMini"><span>Precio promedio</span><strong>' + (r.precioProm !== null ? money(r.precioProm) : '—') + '</strong></div>' +
-        '<div class="cajaMini"><span>Ganancia por maple</span><strong>' + (r.gananciaMaple !== null ? money(r.gananciaMaple) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Costo por huevo</span><strong>' + (r.costoHuevo !== null ? money(r.costoHuevo) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Costo por maple (30)</span><strong>' + (r.costoMaple !== null ? money(r.costoMaple) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Costo por docena</span><strong>' + (r.costoDocena !== null ? money(r.costoDocena) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Costo por media docena</span><strong>' + (r.costoMediaDocena !== null ? money(r.costoMediaDocena) : '—') + '</strong></div>' +
       '</div>' +
-      '<p class="cajaNota">' + (r.maplesVendidos > 0 ? 'El costo por maple usa los ' + (Math.round(r.maplesVendidos * 10) / 10) + ' maples vendidos del mes.' : (r.producidos > 0 ? 'Todavía no hay pedidos entregados: el costo por maple se calcula sobre los ' + (Math.round(r.producidos * 10) / 10) + ' maples producidos.' : 'Entregá pedidos o cargá un registro de producción para calcular el costo por maple.')) + (r.factorDias < 1 && r.gastosTotal > 0 ? ' Los gastos fijos se cuentan por los ' + r.diasTranscurridos + ' días que van del mes.' : '') + '</p>' +
+      '<p class="cajaNota">Incluye alimento, sanidad, operativos y envases registrados. Cargá todos los gastos para que el costo sea representativo.</p>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Indicadores de la granja</h3></div>' +
+      '<div class="cajaGrid">' +
+        '<div class="cajaMini"><span>Huevos aptos</span><strong>' + num(r.huevosAptos) + '</strong></div>' +
+        '<div class="cajaMini"><span>Postura promedio</span><strong>' + (r.postura !== null ? pct(r.postura) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Alimento por huevo*</span><strong>' + (r.costoAlimentoHuevo !== null ? money(r.costoAlimentoHuevo) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Descarte (rotos + sucios)</span><strong>' + (r.porcentajeDescarte !== null ? pct(r.porcentajeDescarte) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Huevos rotos</span><strong>' + num(r.huevosRotos) + '</strong></div>' +
+        '<div class="cajaMini"><span>Huevos sucios</span><strong>' + num(r.huevosSucios) + '</strong></div>' +
+      '</div>' +
+      '<p class="cajaNota">*Costo del alimento registrado dividido por huevos aptos. La postura usa las aves cargadas en los galpones y los días con registro de producción.</p>' +
+    '</section>' +
+
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Rentabilidad por presentación</h3></div>' +
+      '<div class="cajaGrid">' +
+        '<div class="cajaMini"><span>Precio promedio por maple de huevos</span><strong>' + (r.precioProm !== null ? money(r.precioProm) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia estimada por maple</span><strong>' + (r.gananciaMaple !== null ? money(r.gananciaMaple) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia estimada por docena</span><strong>' + (r.gananciaDocena !== null ? money(r.gananciaDocena) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Ganancia estimada por media docena</span><strong>' + (r.gananciaMediaDocena !== null ? money(r.gananciaMediaDocena) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Punto de equilibrio</span><strong>' + (r.puntoEquilibrio !== null ? num(r.puntoEquilibrio) + ' maples' : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Maples vendidos</span><strong>' + num(Math.round(r.maplesVendidos * 10) / 10) + '</strong></div>' +
+      '</div>' +
+      '<p class="cajaNota">Las ganancias por presentación son estimaciones prorrateadas desde el precio promedio por maple vendido. El precio promedio por maple considera solo pedidos de huevos. El punto de equilibrio es una estimación y no incluye otros productos con estructura de costos propia.</p>' +
     '</section>' +
 
     '<section class="panel">' +
@@ -3055,7 +3111,7 @@ function renderCaja() {
       '<div class="panel__head"><h3>Gastos del mes</h3><span class="chip chip--on" style="flex:none">' + money(r.gastosCargadosMes) + '</span></div>' +
       '<div class="cajaGrid" style="margin-bottom:6px">' +
         '<div class="cajaMini"><span>Gastos sin envases</span><strong>' + money(r.gastosFijosMes) + '</strong></div>' +
-        '<div class="cajaMini"><span>Envases del mes</span><strong>' + money(r.gastosVariable) + '</strong></div>' +
+        '<div class="cajaMini"><span>Envases de la producción</span><strong>' + money(r.gastosVariable) + '</strong></div>' +
       '</div>' +
       (r.factorDias < 1 && r.gastosFijosMes > 0 ? '<p class="cajaNota">Los montos de la lista son por mes completo. En las cuentas de arriba contamos ' + r.diasTranscurridos + ' de ' + r.diasMes + ' días (' + money(r.gastosFijos) + ').</p>' : '') +
       (gastosHtml || emptyState('Todavía no cargaste gastos. Podés empezar con los de tu planilla.', null)) +
@@ -3160,7 +3216,7 @@ function abrirGastoModal(id) {
         '<label class="field"><span>¿Cómo se repite?</span><select id="gt_tipo">' +
           '<option value="MENSUAL"' + (g && g.tipo === 'MENSUAL' ? ' selected' : '') + '>Todos los meses (fijo)</option>' +
           '<option value="UNICO"' + (g && g.tipo === 'UNICO' ? ' selected' : '') + '>Solo este mes</option>' +
-          '<option value="MAPLE"' + (g && g.tipo === 'MAPLE' ? ' selected' : '') + '>Por cada maple vendido</option>' +
+          '<option value="MAPLE"' + (g && g.tipo === 'MAPLE' ? ' selected' : '') + '>Por cada maple producido</option>' +
         '</select></label>' +
         '<label class="field"><span id="gt_fechaLbl">' + (g && g.tipo === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes') + '</span><input type="date" id="gt_fecha" value="' + fecha + '"></label>' +
         '<p class="cajaNota" id="gt_hint"></p>' +
@@ -3176,7 +3232,7 @@ function abrirGastoModal(id) {
     const t = tipoSel.value;
     document.getElementById('gt_fechaLbl').textContent = t === 'UNICO' ? 'Fecha del gasto' : 'Desde el mes';
     hint.textContent = t === 'MAPLE'
-      ? 'Poné cuánto cuesta por cada maple (por ejemplo, envases). Se multiplica por los maples vendidos.'
+      ? 'Poné cuánto cuesta por cada maple (por ejemplo, envases). Se multiplica por los maples producidos aptos para venta.'
       : t === 'UNICO'
         ? 'Se cuenta solo en el mes de esa fecha (por ejemplo, una reparación).'
         : 'Se cuenta todos los meses desde esa fecha, sin volver a cargarlo.';
