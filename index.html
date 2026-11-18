@@ -1273,6 +1273,25 @@ function posturaPromedio(galponIds, desde, hasta, avesManual) {
 }
 /* Gallinas del recuento más reciente: capacidad del galpón del último registro cargado.
    Si no hay registros o ese galpón no tiene capacidad, usa el total de todos los galpones. */
+/* Aves para calcular postura: si el galpón tiene cargadas menos "aves actuales" que
+   las iniciales, se toma la inicial (no puede haber más huevos que gallinas). */
+function avesGalponPostura(g) {
+  if (!g) return 0;
+  const cap = Number(g.capacidad) || 0;
+  const ini = Number(g.cantidadInicial) || 0;
+  return Math.max(cap, ini);
+}
+function avesPostura(galponIds) {
+  const lista = galponIds
+    ? (state.galpones || []).filter(g => galponIds.indexOf(g.id) !== -1)
+    : (state.galpones || []);
+  const t = lista.reduce((s2, g) => s2 + avesGalponPostura(g), 0);
+  return t || totalGallinas(galponIds);
+}
+/* La postura no puede pasar de 100%: si da más, es dato mal cargado y se muestra el tope. */
+function pctPostura(v) { return v === null || v === undefined ? '—' : pct(Math.min(100, Math.max(0, v))); }
+function posturaExcedida(v) { return v !== null && v !== undefined && v > 100; }
+
 function gallinasRecuentoReciente() {
   if (state.registros && state.registros.length) {
     const ult = state.registros.slice().sort((a, b) =>
@@ -1280,11 +1299,11 @@ function gallinasRecuentoReciente() {
       ((b.creadoEn || 0) - (a.creadoEn || 0))
     )[0];
     if (ult && ult.galponId) {
-      const cap = totalGallinas([ult.galponId]);
+      const cap = avesPostura([ult.galponId]);
       if (cap > 0) return cap;
     }
   }
-  return totalGallinas() || 0;
+  return avesPostura() || 0;
 }
 
 /* ---------- Armado de maples del día ----------
@@ -1479,7 +1498,7 @@ function renderInicio() {
   });
   const porFecha = {};
   Object.values(ultimoRegistroDiaGalpon).forEach(reg => {
-    const aves = totalGallinas([reg.galponId]);
+    const aves = avesPostura([reg.galponId]);
     const huevos = totalRegistro(reg);
     if (!aves || aves <= 0) return;
     if (!porFecha[reg.fecha]) porFecha[reg.fecha] = { huevos: 0, aves: 0 };
@@ -1488,6 +1507,8 @@ function renderInicio() {
   });
   const posturasDiarias = Object.entries(porFecha).map(([fecha, datos]) => ({
     fecha,
+    huevos: datos.huevos,
+    aves: datos.aves,
     porcentaje: datos.aves > 0 ? (datos.huevos / datos.aves) * 100 : null
   })).filter(d => d.porcentaje !== null && Number.isFinite(d.porcentaje));
   const picoDiario = posturasDiarias.length ? posturasDiarias.reduce((max, d) => d.porcentaje > max.porcentaje ? d : max) : null;
@@ -1501,6 +1522,10 @@ function renderInicio() {
   const ppSub = ppMes !== null
     ? 'promedio del mes · huevos ÷ gallinas'
     : (ppHist !== null ? 'promedio general · sin registros en ' + fmtMonthLabel(mes) : 'sin registros de producción');
+  const ppExcede = posturaExcedida(ppValor);
+  const subPicoDiario = picoDiario
+    ? 'mejor día: ' + fechaPicoPostura + ' · ' + num(picoDiario.huevos) + ' huevos / ' + num(picoDiario.aves) + ' gallinas'
+    : 'sin registros en ' + fmtMonthLabel(mes);
 
   const desde = shiftMes(mes, -5);
   const meses = [];
@@ -1524,10 +1549,13 @@ function renderInicio() {
       statCard('Ingresos por ventas', money(r.ingresos), 'huevos y otros productos', 'ok') +
       statCard('Ganancia estimada', money(r.ganancia), 'ingresos menos gastos cargados', r.ganancia >= 0 ? 'ok' : 'danger') +
       statCard('Maples producidos', num(r.producidos), 'huevos aptos ÷ 30', 'ok') +
-      statCard('Pico de postura promedio', ppValor === null ? '—' : pct(ppValor), ppSub, ppValor === null ? 'warn' : ppValor >= 80 ? 'ok' : ppValor >= 60 ? 'warn' : 'danger') +
-      statCard('Pico de postura diario', picoPostura === null ? '—' : pct(picoPostura), picoPostura === null ? 'sin registros en ' + fmtMonthLabel(mes) : 'mejor día: ' + fechaPicoPostura, picoPostura === null ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura promedio', pctPostura(ppValor), ppSub, ppValor === null || posturaExcedida(ppValor) ? 'warn' : ppValor >= 80 ? 'ok' : ppValor >= 60 ? 'warn' : 'danger') +
+      statCard('Pico de postura diario', pctPostura(picoPostura), subPicoDiario, picoPostura === null || posturaExcedida(picoPostura) ? 'warn' : picoPostura >= 80 ? 'ok' : picoPostura >= 60 ? 'warn' : 'danger') +
       statCard('Pedidos pendientes', num(pedidosPendientes), 'reservados para este mes', pedidosPendientes ? 'warn' : 'ok') +
     '</section>' +
+    ((posturaExcedida(picoPostura) || ppExcede)
+      ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay más huevos cargados que gallinas en el galpón. Revisá <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
+      : '') +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción vs. ventas</h3><span class="muted">Últimos 6 meses</span></div>' +
       '<canvas id="chartInicioProduccionVentas" height="210"></canvas>' +
@@ -3488,7 +3516,7 @@ function renderReportes() {
           '<tr><td>Rotos</td><td>' + num(agg.rotos) + ' (' + pct(rotosPct) + ')</td></tr>' +
           '<tr><td>Sucios / descartados</td><td>' + num(agg.sucios) + '</td></tr>' +
           '<tr><td>Días con registro</td><td>' + diasConDatos(lista) + '</td></tr>' +
-          (function() { const aves = gallinasRecuentoReciente(); const dias = diasConDatos(lista); const pp = (aves > 0 && dias > 0) ? ((agg.total / dias) / aves) * 100 : null; return pp !== null ? '<tr><td>Pico de postura promedio</td><td><strong>' + pct(pp) + '</strong> huevos/gallinas</td></tr>' : ''; })() +
+          (function() { const aves = gallinasRecuentoReciente(); const dias = diasConDatos(lista); const pp = (aves > 0 && dias > 0) ? ((agg.total / dias) / aves) * 100 : null; return pp !== null ? '<tr><td>Pico de postura promedio</td><td><strong>' + pctPostura(pp) + '</strong> huevos/gallinas</td></tr>' : ''; })() +
           '</tbody></table></div>'
       ) : emptyState('No hay registros en este período.', null)) +
     '</section>' +
@@ -3719,7 +3747,7 @@ async function exportarPDF(desde, hasta) {
   ];
   const avesPdf = gallinasRecuentoReciente(); const diasPdf = diasConDatos(lista);
   const ppPdf = (avesPdf > 0 && diasPdf > 0) ? ((agg.total / diasPdf) / avesPdf) * 100 : null;
-  if (ppPdf !== null) resumenBody.push(['Pico de postura promedio', pct(ppPdf) + ' huevos/gallinas']);
+  if (ppPdf !== null) resumenBody.push(['Pico de postura promedio', pctPostura(ppPdf) + ' huevos/gallinas']);
   doc.autoTable({
     startY: y, margin: { left: marginX, right: marginX },
     head: [['Indicador', 'Valor']], body: resumenBody,
@@ -3821,7 +3849,7 @@ function exportarExcel(desde, hasta) {
   ];
   const avesExcel = gallinasRecuentoReciente(); const diasExcel = diasConDatos(lista);
   const ppExcel = (avesExcel > 0 && diasExcel > 0) ? ((agg.total / diasExcel) / avesExcel) * 100 : null;
-  if (ppExcel !== null) resumen.push({ Indicador: 'Pico de postura promedio (%)', Valor: Number(ppExcel.toFixed(2)) });
+  if (ppExcel !== null) resumen.push({ Indicador: 'Pico de postura promedio (%)', Valor: Number(Math.min(100, ppExcel).toFixed(2)) });
 
   const wb = XLSX.utils.book_new();
   const wsResumen = XLSX.utils.json_to_sheet(resumen);
