@@ -1121,11 +1121,18 @@ function picoPostura(huevos, galponIds) {
   return aves > 0 ? (huevos / aves) * 100 : null;
 }
 /* Postura promedio del período: huevos por día (solo días con registro) ÷ aves */
+function primerRegistroFecha(galponIds) {
+  const regs = state.registros.filter(r => !galponIds || galponIds.indexOf(r.galponId) !== -1);
+  if (!regs.length) return null;
+  return regs.reduce((min, r) => (!min || r.fecha < min) ? r.fecha : min, null);
+}
 function posturaPromedio(galponIds, desde, hasta, avesManual) {
   const aves = avesManual !== undefined ? avesManual : totalGallinas(galponIds);
   if (!aves || aves <= 0) return null;
+  const desdeReal = desde || primerRegistroFecha(galponIds) || todayStr();
+  const hastaReal = hasta || todayStr();
   const regs = state.registros.filter(r =>
-    (!galponIds || galponIds.indexOf(r.galponId) !== -1) && r.fecha >= desde && r.fecha <= hasta);
+    (!galponIds || galponIds.indexOf(r.galponId) !== -1) && r.fecha >= desdeReal && r.fecha <= hastaReal);
   if (!regs.length) return null;
   const porDia = {};
   regs.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + totalRegistro(r); });
@@ -1364,7 +1371,7 @@ function renderInicio() {
       statCard('Mes', num(Math.floor(aggMes.total / 30)) + (aggMes.total % 30 ? ' <span style="font-size:14px;opacity:.6">+ ' + (aggMes.total % 30) + 'u</span>' : ''), 'maples', 'ok') +
       statCard('% Rotos hoy', pct(rotosPctHoy), 'del total del día', rotosClase) +
       statCard('Promedio diario', num(Math.round(promedioDiario)), 'últimos 30 días', 'ok') +
-      (function() { const pp = posturaPromedio(null, addDays(hoy, -6), hoy, gallinasRecuentoReciente()); return pp !== null ? statCard('Pico de postura', pct(pp), 'promedio 7 días', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
+      (function() { const d0 = primerRegistroFecha(null); const pp = d0 ? posturaPromedio(null, d0, hoy, gallinasRecuentoReciente()) : null; return pp !== null ? statCard('Pico de postura', pct(pp), 'promedio desde el 1er registro', pp >= 80 ? 'ok' : pp >= 60 ? 'warn' : 'danger') : ''; })() +
     '</section>' +
 
     (aggHoy.total ? (
@@ -1922,11 +1929,11 @@ function renderLotes() {
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
-      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Postura</th><th>Huevos sem.</th><th>Huevos mes</th><th></th></tr></thead><tbody>' +
-        filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + resumenLote(f.g) + '</td>' +
-          '<td>' + num(f.hoyG) + '</td>' +
-          '<td>' + (function() { const pp = posturaPromedio([f.g.id], inicioSemana, hoy); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
-          '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
+      (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Cant. aves</th><th>Pico postura</th><th>Sem. de vida</th><th></th></tr></thead><tbody>' +
+        filas.map(f => '<tr><td><strong>' + escapeHtml(f.g.nombre) + '</strong></td>' +
+          '<td>' + ((avesGalpon(f.g) > 0) ? num(avesGalpon(f.g)) : '<span class="muted">—</span>') + '</td>' +
+          '<td>' + (function() { const d0 = primerRegistroFecha([f.g.id]); const pp = d0 ? posturaPromedio([f.g.id], d0, hoy) : null; return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
+          '<td>' + (function() { const e = edadLote(f.g); return e ? ('<strong>' + e.semanas + '</strong> sem') : '<span class="muted">—</span>'; })() + '</td>' +
           '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-hist-galpon="' + f.g.id + '" title="Historial del lote">' + ICONS.history + '</button><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
     '</section>' +
