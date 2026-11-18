@@ -1212,7 +1212,8 @@ const ICONS = {
   egg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8 2 5 9 5 14a7 7 0 0 0 14 0c0-5-3-12-7-12Z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16L12 21L3 16V8L12 3L21 8Z"/><path d="M12 12L21 8"/><path d="M12 12V21"/><path d="M12 12L3 8"/></svg>',
-  scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v17"/><path d="M7 20h10"/><path d="M4.5 7h15"/><path d="M12 3.1a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"/><path d="M4.5 7 2 13h5L4.5 7Z"/><path d="M19.5 7 17 13h5l-2.5-6Z"/></svg>'
+  scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v17"/><path d="M7 20h10"/><path d="M4.5 7h15"/><path d="M12 3.1a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"/><path d="M4.5 7 2 13h5L4.5 7Z"/><path d="M19.5 7 17 13h5l-2.5-6Z"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>'
 };
 
 /* ---------- Render: shell / navegación ---------- */
@@ -1654,6 +1655,156 @@ function abrirEditarGalponModal(id) {
   });
 }
 
+/* ---------- Lote / ciclo de vida del galpón ---------- */
+function diasEntre(desde, hasta) {
+  if (!desde) return 0;
+  const a = new Date(desde + 'T00:00:00');
+  const b = new Date((hasta || todayStr()) + 'T00:00:00');
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+function edadLote(g) {
+  if (!g || !g.fechaIngreso) return null;
+  const dias = diasEntre(g.fechaIngreso);
+  return { dias: dias, semanas: Math.floor(dias / 7), resto: dias % 7 };
+}
+function etapaLote(g) {
+  if (!g || !g.fechaIngreso) return null;
+  if (!g.fechaPostura) return { txt: 'Cría / recría', tone: 'warn' };
+  const sem = Math.floor(diasEntre(g.fechaPostura) / 7);
+  if (sem < 5) return { txt: 'Inicio de postura', tone: 'warn' };
+  if (sem < 40) return { txt: 'Producción plena', tone: 'ok' };
+  if (sem < 60) return { txt: 'Producción media', tone: 'warn' };
+  return { txt: 'Declive · evaluar recambio', tone: 'danger' };
+}
+function resumenLote(g) {
+  const e = edadLote(g);
+  if (!e) return '';
+  const et = etapaLote(g);
+  return '<div class="muted" style="font-size:12px;margin-top:2px">Lote del ' + fmtDateShort(g.fechaIngreso) + ' · ' + e.semanas + ' sem' + (e.resto ? ' y ' + e.resto + ' d' : '') + (et ? ' · ' + et.txt : '') + '</div>';
+}
+function produccionPorEdadLote(g) {
+  const aves = Number(g.capacidad) || 0;
+  const mapa = {};
+  state.registros.filter(r => r.galponId === g.id && g.fechaIngreso && r.fecha >= g.fechaIngreso).forEach(r => {
+    const sem = Math.floor(diasEntre(g.fechaIngreso, r.fecha) / 7) + 1;
+    if (!mapa[sem]) mapa[sem] = { huevos: 0, dias: {} };
+    mapa[sem].huevos += totalRegistro(r);
+    mapa[sem].dias[r.fecha] = 1;
+  });
+  const semanas = Object.keys(mapa).map(Number).sort((a, b) => a - b);
+  return {
+    labels: semanas.map(s => 'Sem ' + s),
+    data: semanas.map(s => {
+      const d = Object.keys(mapa[s].dias).length || 1;
+      return aves > 0 ? Number(((mapa[s].huevos / d) / aves * 100).toFixed(1)) : 0;
+    }),
+    totalHuevos: semanas.reduce((s, k) => s + mapa[k].huevos, 0),
+    aves: aves
+  };
+}
+function drawPosturaPorEdad(canvasId, prod) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  destroyChart(canvasId);
+  state.charts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: prod.labels,
+      datasets: [{ data: prod.data, backgroundColor: '#78B99A', borderRadius: 8, maxBarThickness: 34 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: baseFont(), color: '#94A3B8' }, grid: { display: false } },
+        y: { ticks: { font: baseFont(), color: '#94A3B8', callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+function abrirHistorialGalpon(id) {
+  const g = state.galpones.find(x => x.id === id);
+  if (!g) return;
+  const modal = document.getElementById('modalEditar');
+  const e = edadLote(g);
+  const et = etapaLote(g);
+  const prod = produccionPorEdadLote(g);
+  const diasPostura = g.fechaPostura ? diasEntre(g.fechaPostura) : 0;
+  const hist = g.historialLotes || [];
+
+  const kpi = e ? (
+    '<div class="tableWrap"><table class="table"><tbody>' +
+      '<tr><td>Edad del lote</td><td><strong>' + e.semanas + ' semanas</strong> <span class="muted">(' + e.dias + ' días)</span></td></tr>' +
+      '<tr><td>Etapa</td><td><strong style="color:var(--' + et.tone + ')">' + et.txt + '</strong></td></tr>' +
+      '<tr><td>Aves iniciales</td><td>' + (g.cantidadInicial ? num(g.cantidadInicial) : '<span class="muted">—</span>') + '</td></tr>' +
+      '<tr><td>Aves actuales</td><td>' + ((Number(g.capacidad) || 0) ? num(g.capacidad) : '<span class="muted">—</span>') + '</td></tr>' +
+      '<tr><td>En postura hace</td><td>' + (g.fechaPostura ? diasPostura + ' días <span class="muted">(desde ' + fmtDateShort(g.fechaPostura) + ')</span>' : '<span class="muted">Todavía no empezó</span>') + '</td></tr>' +
+      '<tr><td>Huevos del lote</td><td>' + num(prod.totalHuevos) + '</td></tr>' +
+    '</tbody></table></div>'
+  ) : '<p class="modalNote">Cargá la fecha de ingreso para ver la edad y la evolución del lote.</p>';
+
+  modal.innerHTML =
+    '<div class="modalCard">' +
+      '<div class="modalCard__head"><h3>Lote · ' + escapeHtml(g.nombre) + '</h3><button class="iconBtn" id="cerrarHist">' + ICONS.x + '</button></div>' +
+      '<div class="fieldGroupTitle" style="margin-top:2px">Datos del lote actual</div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>Ingreso de pollitas/os</span><input type="date" id="hg_ingreso" value="' + (g.fechaIngreso || '') + '"></label>' +
+        '<label class="field"><span>Inicio de postura</span><input type="date" id="hg_postura" value="' + (g.fechaPostura || '') + '"></label>' +
+      '</div>' +
+      '<div class="formRow2">' +
+        '<label class="field"><span>Cantidad inicial</span><input type="number" min="0" id="hg_inicial" value="' + (g.cantidadInicial || '') + '" placeholder="Ej: 250"></label>' +
+        '<label class="field"><span>Aves actuales</span><input type="number" min="0" id="hg_aves" value="' + (g.capacidad || '') + '"></label>' +
+      '</div>' +
+      kpi +
+      '<div class="fieldGroupTitle">Evolución por edad (postura semanal)</div>' +
+      (prod.labels.length ? '<canvas id="chartEdadLote" height="200"></canvas>' : '<p class="modalNote">Todavía no hay producción registrada de este lote.</p>') +
+      (hist.length ? '<div class="fieldGroupTitle">Lotes anteriores</div><div class="tableWrap"><table class="table"><thead><tr><th>Lote</th><th>Aves</th><th>Días</th></tr></thead><tbody>' +
+        hist.map(h => '<tr><td>' + fmtDateShort(h.fechaIngreso) + ' → ' + (h.fechaFin ? fmtDateShort(h.fechaFin) : '—') + '</td><td>' + (h.cantidadInicial ? num(h.cantidadInicial) : '—') + '</td><td>' + (h.fechaIngreso && h.fechaFin ? diasEntre(h.fechaIngreso, h.fechaFin) : '—') + '</td></tr>').join('') +
+        '</tbody></table></div>' : '') +
+      '<button type="button" class="btn btn--primary" id="guardarLote">Guardar datos del lote</button>' +
+      (e ? '<button type="button" class="btn btn--ghost" id="cerrarLote" style="margin-top:8px">Cerrar lote y empezar uno nuevo</button>' : '') +
+    '</div>';
+
+  modal.classList.add('modal--open');
+  document.getElementById('cerrarHist').addEventListener('click', () => modal.classList.remove('modal--open'));
+  if (prod.labels.length) { try { drawPosturaPorEdad('chartEdadLote', prod); } catch (err) { console.warn(err); } }
+
+  document.getElementById('guardarLote').addEventListener('click', async () => {
+    const ingreso = document.getElementById('hg_ingreso').value || null;
+    const postura = document.getElementById('hg_postura').value || null;
+    if (ingreso && postura && postura < ingreso) { toast('El inicio de postura no puede ser antes del ingreso.'); return; }
+    try {
+      await actualizarGalpon(id, {
+        fechaIngreso: ingreso,
+        fechaPostura: postura,
+        cantidadInicial: Number(document.getElementById('hg_inicial').value) || 0,
+        capacidad: Number(document.getElementById('hg_aves').value) || 0
+      });
+      toast('Lote guardado ✓');
+      modal.classList.remove('modal--open');
+      renderLotes();
+    } catch (err) { toast('No se pudo guardar: ' + err.message); }
+  });
+
+  const btnCerrar = document.getElementById('cerrarLote');
+  if (btnCerrar) btnCerrar.addEventListener('click', async () => {
+    if (!confirm('Se va a guardar este lote en el historial y empezar uno nuevo.\n\n¿Continuar?')) return;
+    const hist2 = (g.historialLotes || []).concat([{
+      fechaIngreso: g.fechaIngreso || null,
+      fechaPostura: g.fechaPostura || null,
+      fechaFin: todayStr(),
+      cantidadInicial: Number(g.cantidadInicial) || 0,
+      avesFinales: Number(g.capacidad) || 0
+    }]);
+    try {
+      await actualizarGalpon(id, { historialLotes: hist2, fechaIngreso: null, fechaPostura: null, cantidadInicial: 0 });
+      toast('Lote archivado ✓');
+      modal.classList.remove('modal--open');
+      renderLotes();
+    } catch (err) { toast('No se pudo archivar: ' + err.message); }
+  });
+}
+
 /* ---------- Render: Gráficos ---------- */
 let graficosPeriodo = 'semana';
 function renderGraficos() {
@@ -1744,11 +1895,11 @@ function renderLotes() {
     '<section class="panel">' +
       '<div class="panel__head"><h3>Producción por galpón</h3></div>' +
       (filas.length ? '<div class="tableWrap"><table class="table"><thead><tr><th>Galpón</th><th>Hoy</th><th>Pico postura</th><th>Semana</th><th>Mes</th><th></th></tr></thead><tbody>' +
-        filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + '</td>' +
+        filas.map(f => '<tr><td>' + f.g.nombre + (f.g.capacidad ? '<span class="muted"> · ' + num(f.g.capacidad) + ' aves</span>' : '') + resumenLote(f.g) + '</td>' +
           '<td>' + num(f.hoyG) + '</td>' +
           '<td>' + (function() { const pp = picoPostura(f.hoyG, [f.g.id]); return pp !== null ? '<strong>' + pct(pp) + '</strong>' : '—'; })() + '</td>' +
           '<td>' + num(f.semG) + '</td><td>' + num(f.mesG) + '</td>' +
-          '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
+          '<td style="text-align:right"><div style="display:inline-flex;gap:6px;justify-content:flex-end"><button class="iconBtn iconBtn--edit" data-hist-galpon="' + f.g.id + '" title="Historial del lote">' + ICONS.history + '</button><button class="iconBtn iconBtn--edit" data-edit-galpon="' + f.g.id + '" title="Editar galp\u00f3n">' + ICONS.pencil + '</button><button class="iconBtn iconBtn--danger" data-del-galpon="' + f.g.id + '" title="Eliminar galp\u00f3n">' + ICONS.trash + '</button></div></td></tr>').join('') +
         '</tbody></table></div>' : emptyState('Todavía no hay galpones cargados.', null)) +
     '</section>' +
     (filas.length ? '<section class="panel"><div class="panel__head"><h3>Comparación entre galpones (mes)</h3></div><canvas id="chartGalpones" height="220"></canvas></section>' : '');
@@ -1762,6 +1913,9 @@ function renderLotes() {
     toast('Galpón agregado ✓');
   });
 
+  el.querySelectorAll('[data-hist-galpon]').forEach(btn => {
+    btn.addEventListener('click', () => abrirHistorialGalpon(btn.getAttribute('data-hist-galpon')));
+  });
   el.querySelectorAll('[data-edit-galpon]').forEach(btn => {
     btn.addEventListener('click', () => abrirEditarGalponModal(btn.getAttribute('data-edit-galpon')));
   });
