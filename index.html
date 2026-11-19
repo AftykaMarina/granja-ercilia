@@ -1551,6 +1551,20 @@ function posturasSemanales(hasta, cant) {
   });
 }
 
+/* Postura por mes: promedio de los porcentajes diarios cargados en cada mes. */
+function posturasMensuales(hasta, cant) {
+  const fin = hasta || todayStr();
+  const finMes = fin.slice(0, 7);
+  const meses = [];
+  for (let i = (cant || 6) - 1; i >= 0; i--) meses.push(shiftMes(finMes, -i));
+  const diarias = posturasPorFecha((state.registros || []).filter(r => r.fecha >= meses[0] + '-01' && r.fecha <= fin));
+  return meses.map(mk => {
+    const ds = diarias.filter(d => d.fecha.slice(0, 7) === mk);
+    const prom = ds.length ? ds.reduce((s2, d) => s2 + d.porcentaje, 0) / ds.length : null;
+    return { mes: mk, dias: ds.length, promedio: prom === null ? null : Math.min(100, prom) };
+  });
+}
+
 function renderInicio() {
   const el = document.getElementById('view-inicio');
   const hoy = todayStr();
@@ -1591,6 +1605,9 @@ function renderInicio() {
   const semanasPostura = posturasSemanales(mesFin, 8);
   const semConDatos = semanasPostura.filter(w => w.promedio !== null);
   const promSemanas = semConDatos.length ? semConDatos.reduce((s2, w) => s2 + w.promedio, 0) / semConDatos.length : null;
+  /* Progreso mensual de la postura (últimos 6 meses). */
+  const mesesPostura = posturasMensuales(mesFin, 6);
+  const mesConDatos = mesesPostura.filter(m => m.promedio !== null);
 
   el.innerHTML =
     '<section class="hero">' +
@@ -1634,6 +1651,15 @@ function renderInicio() {
       '</p>' +
     '</section>' +
     '<section class="panel">' +
+      '<div class="panel__head"><h3>Postura por mes</h3><span class="muted">Últimos 6 meses</span></div>' +
+      (mesConDatos.length
+        ? '<canvas id="chartInicioPosturaMes" height="220"></canvas>'
+        : emptyState('Todavía no hay registros de producción en los últimos 6 meses.', null)) +
+      '<p class="modalNote">Cada barra es el promedio diario de postura de ese mes. El mes en curso se marca en amarillo y crece a medida que cargás los días.' +
+        (mesConDatos.length > 1 ? ' Mejor mes: <strong>' + fmtMonthLabel(mesConDatos.reduce((a, b) => b.promedio > a.promedio ? b : a).mes) + '</strong>.' : '') +
+      '</p>' +
+    '</section>' +
+    '<section class="panel">' +
       '<div class="panel__head"><h3>Resultado del período</h3></div>' +
       '<div class="tableWrap"><table class="table"><tbody>' +
         '<tr><td>Ingresos por ventas</td><td style="text-align:right"><strong>' + money(r.ingresos) + '</strong></td></tr>' +
@@ -1670,6 +1696,35 @@ function renderInicio() {
           pointBorderColor: '#1B2430',
           pointBorderWidth: 1.5,
           borderWidth: 2.5
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => 'Postura: ' + ctx.parsed.y + '%' } }
+        },
+        scales: {
+          x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
+          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
+        }
+      }
+    });
+  }
+  const canvasMes = document.getElementById('chartInicioPosturaMes');
+  if (canvasMes && typeof Chart !== 'undefined' && mesConDatos.length) {
+    const mesActualKeyStr = mesFin.slice(0, 7);
+    destroyChart('chartInicioPosturaMes');
+    state.charts['chartInicioPosturaMes'] = new Chart(canvasMes.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: mesesPostura.map(m => fmtMonthLabel(m.mes)),
+        datasets: [{
+          label: 'Postura',
+          data: mesesPostura.map(m => m.promedio === null ? null : Number(m.promedio.toFixed(1))),
+          backgroundColor: mesesPostura.map(m => m.mes === mesActualKeyStr ? '#F2C14E' : '#78B99A'),
+          borderRadius: 8,
+          maxBarThickness: 44
         }]
       },
       options: {
