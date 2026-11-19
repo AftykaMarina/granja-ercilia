@@ -765,10 +765,23 @@ function onDataChanged() {
 
 /* ---------- Operaciones de datos (nube / local) ---------- */
 async function crearRegistro(reg) {
+  // Una sola carga vigente por galpón y fecha: una nueva carga reemplaza la anterior.
   if (db) {
-    const { id } = reg; const data = Object.assign({}, reg); delete data.id;
-    await db.collection('registros').doc(id).set(data);
+    const { id } = reg;
+    const data = Object.assign({}, reg); delete data.id;
+    const existentes = state.registros.filter(r =>
+      r.fecha === reg.fecha && r.galponId === reg.galponId
+    );
+    const batch = db.batch();
+    existentes.forEach(r => {
+      if (r.id && r.id !== id) batch.delete(db.collection('registros').doc(r.id));
+    });
+    batch.set(db.collection('registros').doc(id), data);
+    await batch.commit();
   } else {
+    state.registros = state.registros.filter(r =>
+      !(r.fecha === reg.fecha && r.galponId === reg.galponId)
+    );
     state.registros.push(reg);
     await guardarRegistrosLocal();
     renderCurrentView();
@@ -1292,8 +1305,20 @@ function posturaPromedio(galponIds, desde, hasta, avesManual) {
     return true;
   });
   if (!regs.length) return null;
+  // Para cada galpón y fecha se considera únicamente la última carga,
+  // igual que en Inicio y en los gráficos temporales.
+  const vigentes = {};
+  regs.forEach(r => {
+    const clave = r.fecha + '|' + r.galponId;
+    const anterior = vigentes[clave];
+    if (!anterior || (Number(r.creadoEn) || 0) >= (Number(anterior.creadoEn) || 0)) {
+      vigentes[clave] = r;
+    }
+  });
   const porDia = {};
-  regs.forEach(r => { porDia[r.fecha] = (porDia[r.fecha] || 0) + totalRegistro(r); });
+  Object.values(vigentes).forEach(r => {
+    porDia[r.fecha] = (porDia[r.fecha] || 0) + totalRegistro(r);
+  });
   const dias = Object.keys(porDia);
   if (!dias.length) return null;
   const prom = dias.reduce((s, d) => s + porDia[d], 0) / dias.length;
