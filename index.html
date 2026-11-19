@@ -2584,16 +2584,17 @@ function _renderPedidosInner(el) {
 
     (function(){
       var lunes = startOfWeek(hoy);
-      var domingo = addDays(lunes, 6);
+      var dosSemanas = addDays(lunes, 13);
       return '<section class="panel" id="secPedidosLista">' +
         '<div class="panel__head"><h3>📋 Pedidos</h3></div>' +
         '<div class="formRow2">' +
           '<label class="field"><span>Desde</span><input type="date" id="fp_desde" value="' + lunes + '"></label>' +
-          '<label class="field"><span>Hasta</span><input type="date" id="fp_hasta" value="' + domingo + '"></label>' +
+          '<label class="field"><span>Hasta</span><input type="date" id="fp_hasta" value="' + dosSemanas + '"></label>' +
         '</div>' +
         '<div class="chipRow" id="fp_rangos">' +
           '<button type="button" class="chip" data-rango="hoy">Hoy</button>' +
-          '<button type="button" class="chip chip--on" data-rango="semana">Esta semana</button>' +
+          '<button type="button" class="chip" data-rango="semana">Esta semana</button>' +
+          '<button type="button" class="chip chip--on" data-rango="dosSemanas">2 semanas</button>' +
           '<button type="button" class="chip" data-rango="mes">Este mes</button>' +
           '<button type="button" class="chip" data-rango="todo">Todo</button>' +
         '</div>' +
@@ -2648,14 +2649,16 @@ function _renderPedidosInner(el) {
       const rA = rango(a);
       const rB = rango(b);
       if (rA !== rB) return rA - rB;
-      /* Luego fecha descendente (más reciente primero) */
-      const fa = a.fechaNecesaria || a.fechaReserva;
-      const fb = b.fechaNecesaria || b.fechaReserva;
+      /* Fecha descendente: primero la entrega más lejana, al final la más próxima */
+      const fa = a.fechaNecesaria || a.fechaReserva || '';
+      const fb = b.fechaNecesaria || b.fechaReserva || '';
       if (fa !== fb) return fb.localeCompare(fa);
       /* Desempate: turno Mañana antes que Tarde */
       const tA = (a.turno === 'MANANA') ? 0 : 1;
       const tB = (b.turno === 'MANANA') ? 0 : 1;
-      return tA - tB;
+      if (tA !== tB) return tA - tB;
+      /* Último desempate: el reservado/cargado más nuevo primero */
+      return String(b.creadoEn || '').localeCompare(String(a.creadoEn || ''));
     });
 
     const nRes = lista.filter(pd => pd.estado === 'RESERVADO').length;
@@ -2685,6 +2688,7 @@ function _renderPedidosInner(el) {
     const dh = document.getElementById('fp_hasta');
     if (rango === 'hoy') { dd.value = hoy; dh.value = hoy; }
     else if (rango === 'semana') { const l = startOfWeek(hoy); dd.value = l; dh.value = addDays(l, 6); }
+    else if (rango === 'dosSemanas') { const l = startOfWeek(hoy); dd.value = l; dh.value = addDays(l, 13); }
     else if (rango === 'mes') { dd.value = hoy.slice(0, 8) + '01'; const y = Number(hoy.slice(0,4)); const m = Number(hoy.slice(5,7)); const last = new Date(y, m, 0).getDate(); dh.value = hoy.slice(0,8) + pad2(last); }
     else if (rango === 'todo') { dd.value = ''; dh.value = ''; }
     setRangoActivo(rango);
