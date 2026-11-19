@@ -1534,6 +1534,23 @@ function posturasPorFecha(regs) {
     .sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
 }
 
+/* Postura por semana (lunes a domingo): promedio de los porcentajes diarios cargados. */
+function posturasSemanales(hasta, cant) {
+  const fin = hasta || todayStr();
+  const iniUlt = startOfWeek(fin);
+  const semanas = [];
+  for (let i = (cant || 8) - 1; i >= 0; i--) {
+    const desde = addDays(iniUlt, -i * 7);
+    semanas.push({ desde: desde, hasta: addDays(desde, 6) });
+  }
+  const diarias = posturasPorFecha((state.registros || []).filter(r => r.fecha >= semanas[0].desde && r.fecha <= fin));
+  return semanas.map(w => {
+    const ds = diarias.filter(d => d.fecha >= w.desde && d.fecha <= w.hasta);
+    const prom = ds.length ? ds.reduce((s2, d) => s2 + d.porcentaje, 0) / ds.length : null;
+    return { desde: w.desde, hasta: w.hasta, dias: ds.length, promedio: prom === null ? null : Math.min(100, prom) };
+  });
+}
+
 function renderInicio() {
   const el = document.getElementById('view-inicio');
   const hoy = todayStr();
@@ -1570,11 +1587,10 @@ function renderInicio() {
       + '.'
     : '';
 
-  const desde = shiftMes(mes, -5);
-  const meses = [];
-  for (let i = 0; i < 6; i++) meses.push(shiftMes(desde, i));
-  const produccionSerie = meses.map(mk => maplesProducidosMes(mk));
-  const ventasSerie = meses.map(mk => resumenCaja(mk).maplesVendidos);
+  /* Progreso semanal de la postura (últimas 8 semanas). */
+  const semanasPostura = posturasSemanales(mesFin, 8);
+  const semConDatos = semanasPostura.filter(w => w.promedio !== null);
+  const promSemanas = semConDatos.length ? semConDatos.reduce((s2, w) => s2 + w.promedio, 0) / semConDatos.length : null;
 
   el.innerHTML =
     '<section class="hero">' +
@@ -1606,9 +1622,16 @@ function renderInicio() {
       ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay m\u00e1s huevos cargados que gallinas ponedoras. Revis\u00e1 <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
       : '') +
     '<section class="panel">' +
-      '<div class="panel__head"><h3>Producción vs. ventas</h3><span class="muted">Últimos 6 meses</span></div>' +
-      '<canvas id="chartInicioProduccionVentas" height="210"></canvas>' +
-      '<p class="modalNote">Compará cuántos maples aptos produjo la granja con cuántos maples se entregaron a clientes.</p>' +
+      '<div class="panel__head"><h3>Postura por semana</h3><span class="muted">Últimas 8 semanas</span></div>' +
+      (semConDatos.length
+        ? '<canvas id="chartInicioPosturaSemana" height="220"></canvas>'
+        : emptyState('Todavía no hay registros de producción en las últimas 8 semanas.', null)) +
+      '<p class="modalNote">' +
+        (promSemanas !== null
+          ? 'Promedio de las últimas 8 semanas: <strong>' + pct(promSemanas) + '</strong> (' + semConDatos.length + (semConDatos.length === 1 ? ' semana con registros' : ' semanas con registros') + '). '
+          : '') +
+        'Cada punto es el promedio de postura de esa semana (huevos juntados ÷ gallinas ponedoras); las semanas sin carga quedan en blanco.' +
+      '</p>' +
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Resultado del período</h3></div>' +
@@ -1626,19 +1649,39 @@ function renderInicio() {
     state.inicioMes = inputMes.value;
     renderInicio();
   });
-  const canvas = document.getElementById('chartInicioProduccionVentas');
-  if (canvas && typeof Chart !== 'undefined') {
-    destroyChart('chartInicioProduccionVentas');
-    state.charts['chartInicioProduccionVentas'] = new Chart(canvas.getContext('2d'), {
-      type: 'bar',
-      data: { labels: meses.map(fmtMonthLabel), datasets: [
-        { label: 'Producidos', data: produccionSerie, backgroundColor: '#C8956A', borderRadius: 6 },
-        { label: 'Vendidos', data: ventasSerie, backgroundColor: '#7A9B6D', borderRadius: 6 }
-      ] },
-      options: { responsive: true, maintainAspectRatio: true, animation: false,
-        plugins: { legend: { display: true, labels: { color: '#94A3B8', font: baseFont() } } },
-        scales: { x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: '#94A3B8', font: baseFont() }, grid: { color: 'rgba(255,255,255,0.06)' } } }
+  const canvas = document.getElementById('chartInicioPosturaSemana');
+  if (canvas && typeof Chart !== 'undefined' && semConDatos.length) {
+    destroyChart('chartInicioPosturaSemana');
+    state.charts['chartInicioPosturaSemana'] = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: semanasPostura.map(w => fmtDateShort(w.desde)),
+        datasets: [{
+          label: 'Postura',
+          data: semanasPostura.map(w => w.promedio === null ? null : Number(w.promedio.toFixed(1))),
+          borderColor: '#78B99A',
+          backgroundColor: 'rgba(120,185,154,0.18)',
+          fill: true,
+          tension: 0.35,
+          spanGaps: false,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#F2C14E',
+          pointBorderColor: '#1B2430',
+          pointBorderWidth: 1.5,
+          borderWidth: 2.5
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => 'Postura: ' + ctx.parsed.y + '%' } }
+        },
+        scales: {
+          x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
+          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
+        }
       }
     });
   }
