@@ -588,11 +588,15 @@ h1,h2,h3,h4{color:var(--ink);}
     <div class="view" id="view-inicio"></div>
     <div class="view" id="view-registrar"></div>
     <div class="view" id="view-pedidos"></div>
+    <!-- Sección Gráficos desactivada por ahora (se reactiva sacando el comentario)
     <div class="view" id="view-graficos"></div>
+    -->
     <div class="view" id="view-lotes"></div>
     <div class="view" id="view-pesajes"></div>
     <div class="view" id="view-caja"></div>
+    <!-- Sección Reportes desactivada por ahora (se reactiva sacando el comentario)
     <div class="view" id="view-reportes"></div>
+    -->
   </main>
 
   <nav class="bottomNav" id="bottomNav"></nav>
@@ -1428,11 +1432,11 @@ const TABS = [
   { id: 'inicio', label: 'Inicio', icon: 'home' },
   { id: 'registrar', label: 'Registrar', icon: 'plus' },
   { id: 'pedidos', label: 'Pedidos', icon: 'box' },
-  { id: 'graficos', label: 'Gráficos', icon: 'chart' },
+  /* { id: 'graficos', label: 'Gráficos', icon: 'chart' },  // Desactivada por ahora: no se usa todavía */
   { id: 'lotes', label: 'Galpones', icon: 'barn' },
   { id: 'pesajes', label: 'Pesajes', icon: 'scale' },
   { id: 'caja', label: 'Caja', icon: 'coin' },
-  { id: 'reportes', label: 'Reportes', icon: 'doc' }
+  /* { id: 'reportes', label: 'Reportes', icon: 'doc' }  // Desactivada por ahora: no se usa todavía */
 ];
 
 function canAccess(tabId) {
@@ -1467,7 +1471,9 @@ function renderNav() {
   });
 }
 
+const TABS_OCULTOS = ['graficos', 'reportes']; // se pueden reactivar más adelante
 function setTab(id) {
+  if (TABS_OCULTOS.indexOf(id) !== -1) return;
   state.activeTab = id;
   renderNav();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('view--active'));
@@ -1478,6 +1484,13 @@ function setTab(id) {
 }
 
 function renderCurrentView() {
+  /* Si quedó guardada una pestaña desactivada, vuelve a Inicio. */
+  if (TABS_OCULTOS.indexOf(state.activeTab) !== -1) {
+    state.activeTab = 'inicio';
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('view--active'));
+    const vi = document.getElementById('view-inicio');
+    if (vi) vi.classList.add('view--active');
+  }
   try {
     if (state.activeTab === 'inicio') renderInicio();
     else if (state.activeTab === 'registrar') renderRegistrar();
