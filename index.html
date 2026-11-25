@@ -2810,14 +2810,9 @@ function _renderPedidosInner(el) {
     })() +
 
     '<section class="panel" id="secPedidosSemanal">' +
-      '<div class="panel__head"><h3>📊 Pedidos por semana</h3><span class="muted">Mañana y tarde</span></div>' +
-      '<div class="chipRow" id="ps_rangos">' +
-        '<button type="button" class="chip" data-sem="4">4 semanas</button>' +
-        '<button type="button" class="chip chip--on" data-sem="8">8 semanas</button>' +
-        '<button type="button" class="chip" data-sem="12">12 semanas</button>' +
-      '</div>' +
+      '<div class="panel__head"><h3>🚚 Qué entregar cada día</h3><span class="muted">Próximos 7 días</span></div>' +
       '<div id="ps_tabla"></div>' +
-      '<p class="modalNote">Cada fila cuenta los pedidos por su <b>fecha de entrega</b>. No incluye cancelados. Los pedidos sin turno cargado cuentan como Mañana.</p>' +
+      '<p class="modalNote">Día por día, cuántos pedidos van a la <b>mañana</b> y cuántos a la <b>tarde</b>. Cuenta por fecha de entrega y no incluye cancelados; los pedidos sin turno cargado cuentan como Mañana.</p>' +
     '</section>';
 
   /* --- Lista de pedidos filtrable (unificada) --- */
@@ -2910,86 +2905,71 @@ function _renderPedidosInner(el) {
   if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
   actualizarListaPedidos();
 
-  /* --- Reporte semanal: cuántos pedidos van en cada turno --- */
-  function resumenSemanaTurno(desde, hasta) {
-    const delRango = state.pedidos.filter(pd => {
-      if (pd.estado === 'CANCELADO') return false;
-      const f = pd.fechaNecesaria || pd.fechaReserva || '';
-      return f >= desde && f <= hasta;
-    });
-    const agrupar = (arr) => ({
-      n: arr.length,
-      maples: arr.reduce((s2, pd) => s2 + maplesDePedido(pd), 0)
-    });
-    const manana = delRango.filter(pd => (pd.turno || 'MANANA') === 'MANANA');
-    const tarde = delRango.filter(pd => (pd.turno || 'MANANA') === 'TARDE');
-    return { manana: agrupar(manana), tarde: agrupar(tarde), total: agrupar(delRango) };
-  }
-
-  function pintarReporteSemanal(cantSemanas) {
+  /* --- Qué entregar cada día (próximos 7 días), separado por turno --- */
+  function pintarPedidosPorDia() {
     const cont = document.getElementById('ps_tabla');
     if (!cont) return;
-    const lunesActual = startOfWeek(hoy);
+    const DIAS = 7;
+    const NOMBRE_DIA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const filas = [];
-    const acum = { manana: { n: 0, maples: 0 }, tarde: { n: 0, maples: 0 }, total: { n: 0, maples: 0 } };
-    let semanasConPedidos = 0;
-    for (let i = 0; i < cantSemanas; i++) {
-      const desde = addDays(lunesActual, -i * 7);
-      const hasta = addDays(desde, 6);
-      const r = resumenSemanaTurno(desde, hasta);
-      acum.manana.n += r.manana.n; acum.manana.maples += r.manana.maples;
-      acum.tarde.n += r.tarde.n; acum.tarde.maples += r.tarde.maples;
-      acum.total.n += r.total.n; acum.total.maples += r.total.maples;
-      if (r.total.n > 0) semanasConPedidos++;
-      /* Las semanas sin pedidos no se muestran (salvo la actual, para ubicarse) */
-      if (!r.total.n && i !== 0) continue;
-      const pctMan = r.total.n ? (r.manana.n / r.total.n) * 100 : 0;
-      const celda = (o, color) =>
-        '<td style="text-align:right">' +
-          (o.n ? '<strong style="color:' + color + '">' + o.n + '</strong>' +
-            '<div class="muted" style="font-size:10.5px">' + (o.maples > 0 ? num(Math.round(o.maples * 10) / 10) + ' maples' : 'sin maples') + '</div>'
-          : '<span class="muted">—</span>') +
+    let totMan = 0, totTar = 0, totPed = 0, totMaples = 0, diasCon = 0;
+
+    for (let i = 0; i < DIAS; i++) {
+      const fecha = addDays(hoy, i);
+      const delDia = (state.pedidos || []).filter(pd => {
+        if (pd.estado === 'CANCELADO') return false;
+        return (pd.fechaNecesaria || pd.fechaReserva) === fecha;
+      });
+      const man = delDia.filter(pd => (pd.turno || 'MANANA') === 'MANANA');
+      const tar = delDia.filter(pd => (pd.turno || 'MANANA') === 'TARDE');
+      const maples = delDia.reduce((s2, pd) => s2 + maplesDePedido(pd), 0);
+      totMan += man.length; totTar += tar.length; totPed += delDia.length; totMaples += maples;
+      if (delDia.length) diasCon++;
+
+      const dow = new Date(fecha + 'T12:00:00').getDay();
+      const nota = i === 0 ? 'hoy' : i === 1 ? 'mañana' : '';
+      const finde = dow === 0 || dow === 6;
+      const enMaples = (mp) => {
+        const v = Math.round(mp * 10) / 10;
+        return v === 1 ? '1 maple' : num(v) + ' maples';
+      };
+      const celda = (arr, color) => {
+        if (!arr.length) return '<td style="text-align:right"><span class="muted">—</span></td>';
+        const mp = arr.reduce((s2, pd) => s2 + maplesDePedido(pd), 0);
+        return '<td style="text-align:right"><strong style="color:' + color + '">' + arr.length + '</strong>' +
+          (mp > 0 ? '<div class="muted" style="font-size:10px">' + enMaples(mp) + '</div>' : '') +
         '</td>';
-      filas.push('<tr' + (i === 0 ? ' style="background:rgba(200,149,106,0.08)"' : '') + '>' +
+      };
+
+      filas.push('<tr' + (i === 0 ? ' style="background:rgba(200,149,106,0.10)"' : (finde ? ' style="background:rgba(148,163,184,0.07)"' : '')) + '>' +
         '<td>' +
-          '<strong style="font-size:12.5px">' + fmtDateShort(desde) + ' – ' + fmtDateShort(hasta) + '</strong>' +
-          '<div class="muted" style="font-size:10px">' + (i === 0 ? 'esta semana' : 'hace ' + i + (i === 1 ? ' semana' : ' semanas')) + '</div>' +
-          (r.total.n
-            ? '<div class="cajaBar" style="margin-top:4px;background:linear-gradient(90deg,#8FC3A8 0 ' + pctMan + '%,#D9A97C ' + pctMan + '% 100%)"></div>'
-            : '') +
+          '<strong style="font-size:13px">' + NOMBRE_DIA[dow] + ' ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + '</strong>' +
+          (nota ? ' <span class="muted" style="font-size:10.5px">(' + nota + ')</span>' : '') +
         '</td>' +
-        celda(r.manana, '#2E7D5B') +
-        celda(r.tarde, '#A9713E') +
-        '<td style="text-align:right"><strong>' + (r.total.n || '—') + '</strong>' +
-          (r.total.n ? '<div class="muted" style="font-size:10.5px">' + num(Math.round(r.total.maples * 10) / 10) + ' maples</div>' : '') +
-        '</td>' +
+        celda(man, '#2E7D5B') +
+        celda(tar, '#A9713E') +
+        '<td style="text-align:right"><strong>' + (delDia.length || '—') + '</strong></td>' +
       '</tr>');
     }
-    if (!filas.length) {
-      cont.innerHTML = emptyState('Todavía no hay pedidos en las últimas ' + cantSemanas + ' semanas.', null);
-      return;
-    }
+
     cont.innerHTML =
       '<div class="tableWrap"><table class="table">' +
-        '<thead><tr><th>Semana</th><th style="text-align:right">Mañana</th><th style="text-align:right">Tarde</th><th style="text-align:right">Total</th></tr></thead>' +
+        '<thead><tr><th>Día</th><th style="text-align:right">Mañana</th><th style="text-align:right">Tarde</th><th style="text-align:right">Total</th></tr></thead>' +
         '<tbody>' + filas.join('') + '</tbody>' +
         '<tfoot><tr style="font-weight:700">' +
-          '<td>Total ' + cantSemanas + ' sem.</td>' +
-          '<td style="text-align:right">' + acum.manana.n + '</td>' +
-          '<td style="text-align:right">' + acum.tarde.n + '</td>' +
-          '<td style="text-align:right">' + acum.total.n + '</td>' +
+          '<td>7 días</td>' +
+          '<td style="text-align:right">' + totMan + '</td>' +
+          '<td style="text-align:right">' + totTar + '</td>' +
+          '<td style="text-align:right">' + totPed + '</td>' +
         '</tr></tfoot>' +
       '</table></div>' +
-      '<p class="muted" style="font-size:11.5px;margin-top:8px">En ' + cantSemanas + ' semanas: <b>' + acum.manana.n + '</b> pedidos a la mañana y <b>' + acum.tarde.n + '</b> a la tarde; ' + num(Math.round(acum.total.maples * 10) / 10) + ' maples en total.' +
-        (semanasConPedidos < cantSemanas ? ' Se muestran las ' + semanasConPedidos + ' semanas con movimiento.' : '') +
+      '<p class="muted" style="font-size:11.5px;margin-top:8px">' +
+        (totPed
+          ? 'En los próximos 7 días tenés <b>' + totPed + '</b> pedidos: <b>' + totMan + '</b> a la mañana y <b>' + totTar + '</b> a la tarde · ' + (Math.round(totMaples * 10) / 10 === 1 ? '1 maple' : num(Math.round(totMaples * 10) / 10) + ' maples') + ' · ' + diasCon + ' día' + (diasCon === 1 ? '' : 's') + ' con entregas.'
+          : 'No hay pedidos para los próximos 7 días.') +
       '</p>';
   }
-
-  document.querySelectorAll('#ps_rangos .chip').forEach(btn => btn.addEventListener('click', () => {
-    document.querySelectorAll('#ps_rangos .chip').forEach(b => b.classList.toggle('chip--on', b === btn));
-    pintarReporteSemanal(Number(btn.getAttribute('data-sem')) || 8);
-  }));
-  pintarReporteSemanal(8);
+  pintarPedidosPorDia();
 
   /* --- Reporte de entregas del día (Mañana / Tarde) --- */
   function textoCantidad(pd) {
