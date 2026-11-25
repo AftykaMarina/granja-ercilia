@@ -3320,9 +3320,14 @@ function resumenCaja(mes) {
   const costoMediaDocena = costoHuevo !== null ? costoHuevo * 6 : null;
   const gastoAlimento = gastosMes.filter(g => g.categoria === 'Alimento').reduce((s, g) => s + (Number(g.monto) || 0) * (g.tipo === 'MAPLE' ? baseMaple : 1), 0);
   const costoAlimentoHuevo = huevosAptos > 0 ? gastoAlimento / huevosAptos : null;
-  const aves = totalGallinas();
+  /* Postura: solo gallinas ponedoras (los galpones de pollitos no cuentan) y
+     promedio de los porcentajes día por día, igual que en Inicio. */
+  const aves = avesPostura();
   const diasProduccion = diasConDatos(regsProduccion);
-  const postura = (aves > 0 && diasProduccion > 0) ? (huevosAptos / (aves * diasProduccion)) * 100 : null;
+  const posturasMes = posturasPorFecha(regsProduccion).filter(d => d.porcentaje !== null);
+  const postura = posturasMes.length
+    ? posturasMes.reduce((s2, d) => s2 + d.porcentaje, 0) / posturasMes.length
+    : null;
   const porcentajeDescarte = (huevosAptos + huevosRotos + huevosSucios) > 0 ? ((huevosRotos + huevosSucios) / (huevosAptos + huevosRotos + huevosSucios)) * 100 : null;
   const precioProm = maplesVendidos > 0 ? ingresoPedidosHuevos / maplesVendidos : null;
   const gananciaMaple = (costoMaple !== null && precioProm !== null) ? precioProm - costoMaple : null;
@@ -3434,13 +3439,17 @@ function renderCaja() {
       '<div class="panel__head"><h3>Indicadores de la granja</h3></div>' +
       '<div class="cajaGrid">' +
         '<div class="cajaMini"><span>Huevos aptos</span><strong>' + num(r.huevosAptos) + '</strong></div>' +
-        '<div class="cajaMini"><span>Postura promedio</span><strong>' + (r.postura !== null ? pct(r.postura) : '—') + '</strong></div>' +
+        '<div class="cajaMini"><span>Postura promedio</span><strong>' + (r.postura !== null ? pctPostura(r.postura) : '—') + '</strong></div>' +
         '<div class="cajaMini"><span>Alimento por huevo*</span><strong>' + (r.costoAlimentoHuevo !== null ? money(r.costoAlimentoHuevo) : '—') + '</strong></div>' +
         '<div class="cajaMini"><span>Descarte (rotos + sucios)</span><strong>' + (r.porcentajeDescarte !== null ? pct(r.porcentajeDescarte) : '—') + '</strong></div>' +
         '<div class="cajaMini"><span>Huevos rotos</span><strong>' + num(r.huevosRotos) + '</strong></div>' +
         '<div class="cajaMini"><span>Huevos sucios</span><strong>' + num(r.huevosSucios) + '</strong></div>' +
       '</div>' +
-      '<p class="cajaNota">*Costo del alimento registrado dividido por huevos aptos. La postura usa las aves cargadas en los galpones y los días con registro de producción.</p>' +
+      '<p class="cajaNota">*Costo del alimento registrado dividido por huevos aptos. La postura se calcula solo con <b>gallinas ponedoras</b>: promedio de los días con registro de producción (huevos juntados \u00f7 gallinas).' +
+        (galponesNoPonen().length
+          ? ' No se cuentan: <b>' + galponesNoPonen().map(g => escapeHtml(g.nombre)).join(', ') + '</b> (' + num(galponesNoPonen().reduce((s2, g) => s2 + avesGalpon(g), 0)) + ' aves en cría).'
+          : '') +
+        '</p>' +
     '</section>' +
 
     '<section class="panel">' +
