@@ -618,6 +618,22 @@ h1,h2,h3,h4{color:var(--ink);}
   .bootSplash__inner{animation:none;}
   .bootSplash__dots i{animation:none; opacity:1; transform:none;}
 }
+/* Día por día en Pedidos */
+.diaCard{background:#F8FBFA; border:1px solid #E3EDEA; border-radius:12px; padding:9px 11px; margin-bottom:8px;}
+.diaCard--hoy{background:#FDF6EE; border-color:#EFDCC6;}
+.diaCard--finde{background:#F5F8F9;}
+.diaCard--vacio{opacity:.7; padding:7px 11px;}
+.diaCard__top{display:flex; justify-content:space-between; align-items:baseline; gap:8px;}
+.diaCard__top strong{font-size:12.5px; color:#173B4D;}
+.diaTurno{display:flex; gap:8px; align-items:baseline; margin-top:6px;}
+.diaTurno__lbl{flex:none; font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:99px;}
+.diaTurno__lbl--man{background:#E3F2EA; color:#2E7D5B;}
+.diaTurno__lbl--tar{background:#FBEEDF; color:#A9713E;}
+.diaTurno__chips{display:flex; flex-wrap:wrap; gap:4px;}
+.chipCliente{display:inline-block; font-size:11.5px; line-height:1.55; padding:1px 8px; border-radius:99px;
+  background:#FFFFFF; border:1px solid #DFEAE6; color:#2B4652; white-space:nowrap;}
+.chipCliente b{color:#173B4D; font-weight:700;}
+.chipCliente--tarde{border-color:#EFDECB; background:#FFFCF8;}
 </style>
 </head>
 <body>
@@ -2812,7 +2828,7 @@ function _renderPedidosInner(el) {
     '<section class="panel" id="secPedidosSemanal">' +
       '<div class="panel__head"><h3>🚚 Qué entregar cada día</h3><span class="muted">Próximos 7 días</span></div>' +
       '<div id="ps_tabla"></div>' +
-      '<p class="modalNote">Día por día, cuántos pedidos van a la <b>mañana</b> y cuántos a la <b>tarde</b>. Cuenta por fecha de entrega y no incluye cancelados; los pedidos sin turno cargado cuentan como Mañana.</p>' +
+      '<p class="modalNote">Cuenta por fecha de entrega. No incluye cancelados; los pedidos sin turno cargado cuentan como Mañana.</p>' +
     '</section>';
 
   /* --- Lista de pedidos filtrable (unificada) --- */
@@ -2905,14 +2921,50 @@ function _renderPedidosInner(el) {
   if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
   actualizarListaPedidos();
 
-  /* --- Qué entregar cada día (próximos 7 días), separado por turno --- */
+  /* --- Qué entregar cada día (próximos 7 días): clientes por turno --- */
+  /* Nombre abreviado: "Juan Pérez" -> "Juan P.", y se recorta si es muy largo. */
+  function nombreCorto(nombre) {
+    const limpio = String(nombre || '').trim().replace(/\s+/g, ' ');
+    if (!limpio) return 'Sin nombre';
+    const partes = limpio.split(' ');
+    let base = partes[0];
+    if (base.length > 9) base = base.slice(0, 8) + '\u2026';
+    if (partes.length > 1) {
+      base += ' ' + partes[partes.length - 1].charAt(0).toUpperCase() + '.';
+    }
+    return base;
+  }
+
   function pintarPedidosPorDia() {
     const cont = document.getElementById('ps_tabla');
     if (!cont) return;
     const DIAS = 7;
     const NOMBRE_DIA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const filas = [];
+    const bloques = [];
     let totMan = 0, totTar = 0, totPed = 0, totMaples = 0, diasCon = 0;
+
+    const fmtMp = (mp) => { const v = Math.round(mp * 10) / 10; return num(v); };
+
+    const chipCliente = (pd, turno) => {
+      const mp = maplesDePedido(pd);
+      const detalle = pd.producto === 'HUEVOS'
+        ? (mp > 0 ? '(' + fmtMp(mp) + ')' : '')
+        : '(' + num(Number(pd.cantidadPresentacion) || 0) + ' frascos)';
+      return '<span class="chipCliente' + (turno === 'TARDE' ? ' chipCliente--tarde' : '') + '">' +
+        escapeHtml(nombreCorto(pd.clienteNombre)) + (detalle ? ' <b>' + detalle + '</b>' : '') +
+      '</span>';
+    };
+
+    const filaTurno = (arr, turno, etiqueta) => {
+      const clase = turno === 'TARDE' ? 'tar' : 'man';
+      const ordenados = arr.slice().sort((a, b) => (a.clienteNombre || '').localeCompare(b.clienteNombre || ''));
+      return '<div class="diaTurno">' +
+        '<span class="diaTurno__lbl diaTurno__lbl--' + clase + '">' + etiqueta + '</span>' +
+        (ordenados.length
+          ? '<span class="diaTurno__chips">' + ordenados.map(pd => chipCliente(pd, turno)).join('') + '</span>'
+          : '<span class="muted" style="font-size:11.5px">—</span>') +
+      '</div>';
+    };
 
     for (let i = 0; i < DIAS; i++) {
       const fecha = addDays(hoy, i);
@@ -2929,43 +2981,32 @@ function _renderPedidosInner(el) {
       const dow = new Date(fecha + 'T12:00:00').getDay();
       const nota = i === 0 ? 'hoy' : i === 1 ? 'mañana' : '';
       const finde = dow === 0 || dow === 6;
-      const enMaples = (mp) => {
-        const v = Math.round(mp * 10) / 10;
-        return v === 1 ? '1 maple' : num(v) + ' maples';
-      };
-      const celda = (arr, color) => {
-        if (!arr.length) return '<td style="text-align:right"><span class="muted">—</span></td>';
-        const mp = arr.reduce((s2, pd) => s2 + maplesDePedido(pd), 0);
-        return '<td style="text-align:right"><strong style="color:' + color + '">' + arr.length + '</strong>' +
-          (mp > 0 ? '<div class="muted" style="font-size:10px">' + enMaples(mp) + '</div>' : '') +
-        '</td>';
-      };
+      const fechaTxt = '<div><strong>' + NOMBRE_DIA[dow] + ' ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + '</strong>' +
+        (nota ? ' <span class="muted" style="font-size:10.5px">(' + nota + ')</span>' : '') + '</div>';
 
-      filas.push('<tr' + (i === 0 ? ' style="background:rgba(200,149,106,0.10)"' : (finde ? ' style="background:rgba(148,163,184,0.07)"' : '')) + '>' +
-        '<td>' +
-          '<strong style="font-size:13px">' + NOMBRE_DIA[dow] + ' ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + '</strong>' +
-          (nota ? ' <span class="muted" style="font-size:10.5px">(' + nota + ')</span>' : '') +
-        '</td>' +
-        celda(man, '#2E7D5B') +
-        celda(tar, '#A9713E') +
-        '<td style="text-align:right"><strong>' + (delDia.length || '—') + '</strong></td>' +
-      '</tr>');
+      if (!delDia.length) {
+        bloques.push('<div class="diaCard diaCard--vacio' + (finde ? ' diaCard--finde' : '') + '">' +
+          '<div class="diaCard__top">' + fechaTxt +
+            '<span class="muted" style="font-size:10.5px">sin pedidos</span>' +
+          '</div>' +
+        '</div>');
+        continue;
+      }
+
+      bloques.push('<div class="diaCard' + (i === 0 ? ' diaCard--hoy' : (finde ? ' diaCard--finde' : '')) + '">' +
+        '<div class="diaCard__top">' + fechaTxt +
+          '<span class="muted" style="font-size:10.5px">' + delDia.length + (delDia.length === 1 ? ' pedido' : ' pedidos') +
+            (maples > 0 ? ' · ' + (Math.round(maples * 10) / 10 === 1 ? '1 maple' : fmtMp(maples) + ' maples') : '') + '</span>' +
+        '</div>' +
+        filaTurno(man, 'MANANA', 'Mañana') +
+        filaTurno(tar, 'TARDE', 'Tarde') +
+      '</div>');
     }
 
-    cont.innerHTML =
-      '<div class="tableWrap"><table class="table">' +
-        '<thead><tr><th>Día</th><th style="text-align:right">Mañana</th><th style="text-align:right">Tarde</th><th style="text-align:right">Total</th></tr></thead>' +
-        '<tbody>' + filas.join('') + '</tbody>' +
-        '<tfoot><tr style="font-weight:700">' +
-          '<td>7 días</td>' +
-          '<td style="text-align:right">' + totMan + '</td>' +
-          '<td style="text-align:right">' + totTar + '</td>' +
-          '<td style="text-align:right">' + totPed + '</td>' +
-        '</tr></tfoot>' +
-      '</table></div>' +
+    cont.innerHTML = bloques.join('') +
       '<p class="muted" style="font-size:11.5px;margin-top:8px">' +
         (totPed
-          ? 'En los próximos 7 días tenés <b>' + totPed + '</b> pedidos: <b>' + totMan + '</b> a la mañana y <b>' + totTar + '</b> a la tarde · ' + (Math.round(totMaples * 10) / 10 === 1 ? '1 maple' : num(Math.round(totMaples * 10) / 10) + ' maples') + ' · ' + diasCon + ' día' + (diasCon === 1 ? '' : 's') + ' con entregas.'
+          ? 'En los próximos 7 días tenés <b>' + totPed + '</b> pedidos: <b>' + totMan + '</b> a la mañana y <b>' + totTar + '</b> a la tarde · ' + (Math.round(totMaples * 10) / 10 === 1 ? '1 maple' : fmtMp(totMaples) + ' maples') + ' · ' + diasCon + ' día' + (diasCon === 1 ? '' : 's') + ' con entregas.'
           : 'No hay pedidos para los próximos 7 días.') +
       '</p>';
   }
