@@ -1,14 +1,13 @@
 {
   "name": "Granja Ercilia",
   "short_name": "Ercilia",
-  "description": "Gestión de producción de huevos de Granja Ercilia",
-"start_url": "/granja-ercilia/",
-"scope": "/granja-ercilia/",
+  "description": "Control de producción de huevos de campo",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F3E6CC",
-  "theme_color": "#6E4429",
-  "lang": "es",
+  "background_color": "#F4FAF8",
+  "theme_color": "#F4FAF8",
   "icons": [
     {
       "src": "icon-192.png",
