@@ -1625,6 +1625,22 @@ function renderInicio() {
   const mesesPostura = posturasMensuales(mesFin, 6);
   const mesConDatos = mesesPostura.filter(m => m.promedio !== null);
 
+  /* Pico de postura día por día (últimas 2 semanas). */
+  const DIAS_POSTURA = 14;
+  const mapaPosturaDia = {};
+  posturasPorFecha(state.registros || []).forEach(d => { mapaPosturaDia[d.fecha] = d; });
+  const dias14 = [];
+  for (let i = DIAS_POSTURA - 1; i >= 0; i--) {
+    const f = addDays(hoy, -i);
+    const d = mapaPosturaDia[f];
+    dias14.push({ fecha: f, pct: d ? d.porcentaje : null, huevos: d ? d.huevos : 0, aves: d ? d.aves : 0 });
+  }
+  const dias14Cargados = dias14.filter(d => d.pct !== null);
+  const promDias14 = dias14Cargados.length
+    ? dias14Cargados.reduce((s2, d) => s2 + d.pct, 0) / dias14Cargados.length : null;
+  const mejorDia14 = dias14Cargados.length
+    ? dias14Cargados.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+
   el.innerHTML =
     '<section class="hero">' +
       '<div class="hero__top"><span class="hero__eyebrow">Resumen del negocio</span><span class="hero__egg">' + ICONS.egg + '</span></div>' +
@@ -1654,6 +1670,18 @@ function renderInicio() {
     ((posturaExcedida(pctHoy) || promExcede)
       ? '<p class="modalNote" style="margin:-8px 0 16px">La postura no puede pasar de 100%: hay m\u00e1s huevos cargados que gallinas ponedoras. Revis\u00e1 <b>Galpones</b> (aves actuales) o si juntaste los huevos de varios galpones en un solo registro.</p>'
       : '') +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>Pico de postura por día</h3><span class="muted">Últimas 2 semanas</span></div>' +
+      (dias14Cargados.length
+        ? '<canvas id="chartInicioPosturaDia" height="220"></canvas>'
+        : emptyState('Todavía no hay registros de producción en las últimas 2 semanas.', null)) +
+      '<p class="modalNote">' +
+        'Cada barra es el pico de postura de ese día (huevos juntados ÷ gallinas ponedoras). ' +
+        'Verde: 80% o más · amarillo: entre 60% y 80% · rojo: menos de 60%. Los días sin carga quedan en blanco.' +
+        (promDias14 !== null ? ' Promedio de las 2 semanas: <strong>' + pct(Math.min(100, promDias14)) + '</strong> (' + dias14Cargados.length + ' de ' + DIAS_POSTURA + ' días cargados).' : '') +
+        (mejorDia14 ? ' Mejor día: <strong>' + fmtDateShort(mejorDia14.fecha) + '</strong> con ' + pctPostura(mejorDia14.pct) + '.' : '') +
+      '</p>' +
+    '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Postura por semana</h3><span class="muted">Últimas 8 semanas</span></div>' +
       (semConDatos.length
@@ -1691,6 +1719,43 @@ function renderInicio() {
     state.inicioMes = inputMes.value;
     renderInicio();
   });
+  const canvasDia = document.getElementById('chartInicioPosturaDia');
+  if (canvasDia && typeof Chart !== 'undefined' && dias14Cargados.length) {
+    destroyChart('chartInicioPosturaDia');
+    state.charts['chartInicioPosturaDia'] = new Chart(canvasDia.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: dias14.map(d => d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7)),
+        datasets: [{
+          label: 'Pico de postura',
+          data: dias14.map(d => d.pct === null ? null : Number(Math.min(100, d.pct).toFixed(1))),
+          backgroundColor: dias14.map(d => d.pct === null ? 'rgba(148,163,184,0.18)' : d.pct >= 80 ? '#78B99A' : d.pct >= 60 ? '#F2C14E' : '#D97783'),
+          borderRadius: 6,
+          maxBarThickness: 26
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const d = dias14[ctx.dataIndex];
+                return d && d.pct !== null
+                  ? 'Postura: ' + pctPostura(d.pct) + ' (' + num(d.huevos) + ' huevos / ' + num(d.aves) + ' gallinas)'
+                  : 'Sin registro cargado';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#94A3B8', font: baseFont(), maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }, grid: { display: false } },
+          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
+        }
+      }
+    });
+  }
   const canvas = document.getElementById('chartInicioPosturaSemana');
   if (canvas && typeof Chart !== 'undefined' && semConDatos.length) {
     destroyChart('chartInicioPosturaSemana');
