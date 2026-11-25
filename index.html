@@ -672,6 +672,9 @@ h1,h2,h3,h4{color:var(--ink);}
 <script>
 /* ===================== Granja Ercilia — lógica de la app ===================== */
 
+/* Versión visible en Perfil: sirve para saber si el celular ya cargó la última copia. */
+const APP_VERSION = '25/11/2026';
+
 /* ---------- Almacenamiento con fallback (window.storage -> localStorage -> memoria) ---------- */
 const memStore = {};
 async function storeGet(key, shared) {
@@ -2804,7 +2807,18 @@ function _renderPedidosInner(el) {
         '<div id="fp_resumen" style="margin-top:6px"></div>' +
         '<div id="fp_lista"></div>' +
       '</section>';
-    })();
+    })() +
+
+    '<section class="panel" id="secPedidosSemanal">' +
+      '<div class="panel__head"><h3>📊 Pedidos por semana</h3><span class="muted">Mañana y tarde</span></div>' +
+      '<div class="chipRow" id="ps_rangos">' +
+        '<button type="button" class="chip" data-sem="4">4 semanas</button>' +
+        '<button type="button" class="chip chip--on" data-sem="8">8 semanas</button>' +
+        '<button type="button" class="chip" data-sem="12">12 semanas</button>' +
+      '</div>' +
+      '<div id="ps_tabla"></div>' +
+      '<p class="modalNote">Cada fila cuenta los pedidos por su <b>fecha de entrega</b>. No incluye cancelados. Los pedidos sin turno cargado cuentan como Mañana.</p>' +
+    '</section>';
 
   /* --- Lista de pedidos filtrable (unificada) --- */
   function actualizarListaPedidos() {
@@ -2895,6 +2909,87 @@ function _renderPedidosInner(el) {
   const cliInput = document.getElementById('fp_cliente');
   if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
   actualizarListaPedidos();
+
+  /* --- Reporte semanal: cuántos pedidos van en cada turno --- */
+  function resumenSemanaTurno(desde, hasta) {
+    const delRango = state.pedidos.filter(pd => {
+      if (pd.estado === 'CANCELADO') return false;
+      const f = pd.fechaNecesaria || pd.fechaReserva || '';
+      return f >= desde && f <= hasta;
+    });
+    const agrupar = (arr) => ({
+      n: arr.length,
+      maples: arr.reduce((s2, pd) => s2 + maplesDePedido(pd), 0)
+    });
+    const manana = delRango.filter(pd => (pd.turno || 'MANANA') === 'MANANA');
+    const tarde = delRango.filter(pd => (pd.turno || 'MANANA') === 'TARDE');
+    return { manana: agrupar(manana), tarde: agrupar(tarde), total: agrupar(delRango) };
+  }
+
+  function pintarReporteSemanal(cantSemanas) {
+    const cont = document.getElementById('ps_tabla');
+    if (!cont) return;
+    const lunesActual = startOfWeek(hoy);
+    const filas = [];
+    const acum = { manana: { n: 0, maples: 0 }, tarde: { n: 0, maples: 0 }, total: { n: 0, maples: 0 } };
+    let semanasConPedidos = 0;
+    for (let i = 0; i < cantSemanas; i++) {
+      const desde = addDays(lunesActual, -i * 7);
+      const hasta = addDays(desde, 6);
+      const r = resumenSemanaTurno(desde, hasta);
+      acum.manana.n += r.manana.n; acum.manana.maples += r.manana.maples;
+      acum.tarde.n += r.tarde.n; acum.tarde.maples += r.tarde.maples;
+      acum.total.n += r.total.n; acum.total.maples += r.total.maples;
+      if (r.total.n > 0) semanasConPedidos++;
+      /* Las semanas sin pedidos no se muestran (salvo la actual, para ubicarse) */
+      if (!r.total.n && i !== 0) continue;
+      const pctMan = r.total.n ? (r.manana.n / r.total.n) * 100 : 0;
+      const celda = (o, color) =>
+        '<td style="text-align:right">' +
+          (o.n ? '<strong style="color:' + color + '">' + o.n + '</strong>' +
+            '<div class="muted" style="font-size:10.5px">' + (o.maples > 0 ? num(Math.round(o.maples * 10) / 10) + ' maples' : 'sin maples') + '</div>'
+          : '<span class="muted">—</span>') +
+        '</td>';
+      filas.push('<tr' + (i === 0 ? ' style="background:rgba(200,149,106,0.08)"' : '') + '>' +
+        '<td>' +
+          '<strong style="font-size:12.5px">' + fmtDateShort(desde) + ' – ' + fmtDateShort(hasta) + '</strong>' +
+          '<div class="muted" style="font-size:10px">' + (i === 0 ? 'esta semana' : 'hace ' + i + (i === 1 ? ' semana' : ' semanas')) + '</div>' +
+          (r.total.n
+            ? '<div class="cajaBar" style="margin-top:4px;background:linear-gradient(90deg,#8FC3A8 0 ' + pctMan + '%,#D9A97C ' + pctMan + '% 100%)"></div>'
+            : '') +
+        '</td>' +
+        celda(r.manana, '#2E7D5B') +
+        celda(r.tarde, '#A9713E') +
+        '<td style="text-align:right"><strong>' + (r.total.n || '—') + '</strong>' +
+          (r.total.n ? '<div class="muted" style="font-size:10.5px">' + num(Math.round(r.total.maples * 10) / 10) + ' maples</div>' : '') +
+        '</td>' +
+      '</tr>');
+    }
+    if (!filas.length) {
+      cont.innerHTML = emptyState('Todavía no hay pedidos en las últimas ' + cantSemanas + ' semanas.', null);
+      return;
+    }
+    cont.innerHTML =
+      '<div class="tableWrap"><table class="table">' +
+        '<thead><tr><th>Semana</th><th style="text-align:right">Mañana</th><th style="text-align:right">Tarde</th><th style="text-align:right">Total</th></tr></thead>' +
+        '<tbody>' + filas.join('') + '</tbody>' +
+        '<tfoot><tr style="font-weight:700">' +
+          '<td>Total ' + cantSemanas + ' sem.</td>' +
+          '<td style="text-align:right">' + acum.manana.n + '</td>' +
+          '<td style="text-align:right">' + acum.tarde.n + '</td>' +
+          '<td style="text-align:right">' + acum.total.n + '</td>' +
+        '</tr></tfoot>' +
+      '</table></div>' +
+      '<p class="muted" style="font-size:11.5px;margin-top:8px">En ' + cantSemanas + ' semanas: <b>' + acum.manana.n + '</b> pedidos a la mañana y <b>' + acum.tarde.n + '</b> a la tarde; ' + num(Math.round(acum.total.maples * 10) / 10) + ' maples en total.' +
+        (semanasConPedidos < cantSemanas ? ' Se muestran las ' + semanasConPedidos + ' semanas con movimiento.' : '') +
+      '</p>';
+  }
+
+  document.querySelectorAll('#ps_rangos .chip').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('#ps_rangos .chip').forEach(b => b.classList.toggle('chip--on', b === btn));
+    pintarReporteSemanal(Number(btn.getAttribute('data-sem')) || 8);
+  }));
+  pintarReporteSemanal(8);
 
   /* --- Reporte de entregas del día (Mañana / Tarde) --- */
   function textoCantidad(pd) {
@@ -4278,7 +4373,30 @@ function renderPerfilModal() {
       '<p class="modalNote">Además de lo anterior, podés exportar en cualquier momento una copia manual de todos los registros.</p>' +
       '<div class="modalRow"><button class="btn btn--ghost" id="btnExportarRespaldo">Descargar copia (.json)</button>' +
       '<label class="btn btn--ghost" id="btnImportarRespaldo">Restaurar copia<input type="file" id="fileRespaldo" accept="application/json" hidden></label></div>' +
+      '<div class="divider"></div>' +
+      '<p class="modalNote" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0">' +
+        '<span>Versión del ' + APP_VERSION + '</span>' +
+        '<button class="btn btn--ghost btn--sm" id="btnBuscarActualizacion" style="width:auto;flex:none">Buscar actualización</button>' +
+      '</p>' +
     '</div>';
+
+  const btnBuscarActualizacion = document.getElementById('btnBuscarActualizacion');
+  if (btnBuscarActualizacion) btnBuscarActualizacion.addEventListener('click', async () => {
+    btnBuscarActualizacion.textContent = 'Actualizando...';
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if (window.caches) {
+        const claves = await caches.keys();
+        await Promise.all(claves.map(k => caches.delete(k)));
+      }
+    } catch (e) {}
+    const u = new URL(location.href);
+    u.searchParams.set('v', String(Date.now()));
+    location.replace(u.toString());
+  });
 
   const btnMostrarNube = document.getElementById('btnMostrarNube');
   if (btnMostrarNube) btnMostrarNube.addEventListener('click', () => { mostrarFormNube = true; renderPerfilModal(); });
@@ -4420,6 +4538,14 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Unhandled promise:', ev.reason);
   try { toast('⚠ Async error: ' + (ev.reason && ev.reason.message || ev.reason)); } catch(e) {}
 });
+
+/* El service worker guarda la app para que abra rápido y sin internet.
+   Para el HTML usa "primero la red", así las actualizaciones se ven al toque. */
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' }).catch(() => {});
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnPerfil').addEventListener('click', abrirPerfil);
