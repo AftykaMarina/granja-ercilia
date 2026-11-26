@@ -1,9 +1,11 @@
+
 {
+  "id": "https://aftykamarina.github.io/granja-ercilia/",
   "name": "Granja Ercilia",
   "short_name": "Ercilia",
   "description": "Control de producción de huevos de campo",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "https://aftykamarina.github.io/granja-ercilia/index.html",
+  "scope": "https://aftykamarina.github.io/granja-ercilia/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F4FAF8",
