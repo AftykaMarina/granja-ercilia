@@ -689,7 +689,7 @@ h1,h2,h3,h4{color:var(--ink);}
 /* ===================== Granja Ercilia — lógica de la app ===================== */
 
 /* Versión visible en Perfil: sirve para saber si el celular ya cargó la última copia. */
-const APP_VERSION = '25/11/2026';
+const APP_VERSION = '27/11/2026';
 
 /* ---------- Almacenamiento con fallback (window.storage -> localStorage -> memoria) ---------- */
 const memStore = {};
@@ -1663,6 +1663,99 @@ function posturasMensuales(hasta, cant) {
   });
 }
 
+/* ---------- Qué entregar cada día (próximos 7 días) ---------- */
+/* Nombre abreviado: "Juan Pérez" -> "Juan P.", y se recorta si es muy largo. */
+function nombreCorto(nombre) {
+  const limpio = String(nombre || '').trim().replace(/\s+/g, ' ');
+  if (!limpio) return 'Sin nombre';
+  const partes = limpio.split(' ');
+  let base = partes[0];
+  if (base.length > 9) base = base.slice(0, 8) + '\u2026';
+  if (partes.length > 1) {
+    base += ' ' + partes[partes.length - 1].charAt(0).toUpperCase() + '.';
+  }
+  return base;
+}
+
+function htmlPedidosPorDia() {
+  const hoy = todayStr();
+  const DIAS = 7;
+  const NOMBRE_DIA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const bloques = [];
+  let totMan = 0, totTar = 0, totPed = 0, totMaples = 0, diasCon = 0;
+
+  const fmtMp = (mp) => { const v = Math.round(mp * 10) / 10; return num(v); };
+  const txtMaples = (mp) => (Math.round(mp * 10) / 10 === 1 ? '1 maple' : fmtMp(mp) + ' maples');
+
+  const chipCliente = (pd, turno) => {
+    const mp = maplesDePedido(pd);
+    const cant = num(Number(pd.cantidadPresentacion) || 0);
+    const detalle = pd.producto !== 'HUEVOS'
+      ? '(' + cant + ' frascos)'
+      : pd.presentacion === 'MAPLE'
+        ? (mp > 0 ? '(' + fmtMp(mp) + ')' : '')
+        : '(' + cant + (pd.presentacion === 'DOCENA' ? ' doc.' : ' med.') + ')';
+    return '<span class="chipCliente' + (turno === 'TARDE' ? ' chipCliente--tarde' : '') + '">' +
+      escapeHtml(nombreCorto(pd.clienteNombre)) + (detalle ? ' <b>' + detalle + '</b>' : '') +
+    '</span>';
+  };
+
+  const filaTurno = (arr, turno, etiqueta) => {
+    const clase = turno === 'TARDE' ? 'tar' : 'man';
+    const ordenados = arr.slice().sort((a, b) => (a.clienteNombre || '').localeCompare(b.clienteNombre || ''));
+    return '<div class="diaTurno">' +
+      '<span class="diaTurno__lbl diaTurno__lbl--' + clase + '">' + etiqueta + '</span>' +
+      (ordenados.length
+        ? '<span class="diaTurno__chips">' + ordenados.map(pd => chipCliente(pd, turno)).join('') + '</span>'
+        : '<span class="muted" style="font-size:11.5px">—</span>') +
+    '</div>';
+  };
+
+  for (let i = 0; i < DIAS; i++) {
+    const fecha = addDays(hoy, i);
+    const delDia = (state.pedidos || []).filter(pd => {
+      if (pd.estado === 'CANCELADO') return false;
+      return (pd.fechaNecesaria || pd.fechaReserva) === fecha;
+    });
+    const man = delDia.filter(pd => (pd.turno || 'MANANA') === 'MANANA');
+    const tar = delDia.filter(pd => (pd.turno || 'MANANA') === 'TARDE');
+    const maples = delDia.reduce((s2, pd) => s2 + maplesDePedido(pd), 0);
+    totMan += man.length; totTar += tar.length; totPed += delDia.length; totMaples += maples;
+    if (delDia.length) diasCon++;
+
+    const dow = new Date(fecha + 'T12:00:00').getDay();
+    const nota = i === 0 ? 'hoy' : i === 1 ? 'mañana' : '';
+    const finde = dow === 0 || dow === 6;
+    const fechaTxt = '<div><strong>' + NOMBRE_DIA[dow] + ' ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + '</strong>' +
+      (nota ? ' <span class="muted" style="font-size:10.5px">(' + nota + ')</span>' : '') + '</div>';
+
+    if (!delDia.length) {
+      bloques.push('<div class="diaCard diaCard--vacio' + (finde ? ' diaCard--finde' : '') + '">' +
+        '<div class="diaCard__top">' + fechaTxt +
+          '<span class="muted" style="font-size:10.5px">sin pedidos</span>' +
+        '</div>' +
+      '</div>');
+      continue;
+    }
+
+    bloques.push('<div class="diaCard' + (i === 0 ? ' diaCard--hoy' : (finde ? ' diaCard--finde' : '')) + '">' +
+      '<div class="diaCard__top">' + fechaTxt +
+        '<span class="muted" style="font-size:10.5px">' + delDia.length + (delDia.length === 1 ? ' pedido' : ' pedidos') +
+          (maples > 0 ? ' · ' + txtMaples(maples) : '') + '</span>' +
+      '</div>' +
+      filaTurno(man, 'MANANA', 'Mañana') +
+      filaTurno(tar, 'TARDE', 'Tarde') +
+    '</div>');
+  }
+
+  return bloques.join('') +
+    '<p class="muted" style="font-size:11.5px;margin-top:8px">' +
+      (totPed
+        ? 'En los próximos 7 días tenés <b>' + totPed + '</b> pedidos: <b>' + totMan + '</b> a la mañana y <b>' + totTar + '</b> a la tarde · ' + txtMaples(totMaples) + ' · ' + diasCon + ' día' + (diasCon === 1 ? '' : 's') + ' con entregas.'
+        : 'No hay pedidos para los próximos 7 días.') +
+    '</p>';
+}
+
 function renderInicio() {
   const el = document.getElementById('view-inicio');
   const hoy = todayStr();
@@ -1699,13 +1792,6 @@ function renderInicio() {
       + '.'
     : '';
 
-  /* Progreso semanal de la postura (últimas 8 semanas). */
-  const semanasPostura = posturasSemanales(mesFin, 8);
-  const semConDatos = semanasPostura.filter(w => w.promedio !== null);
-  const promSemanas = semConDatos.length ? semConDatos.reduce((s2, w) => s2 + w.promedio, 0) / semConDatos.length : null;
-  /* Progreso mensual de la postura (últimos 6 meses). */
-  const mesesPostura = posturasMensuales(mesFin, 6);
-  const mesConDatos = mesesPostura.filter(m => m.promedio !== null);
 
   /* Pico de postura día por día (últimas 2 semanas). */
   const DIAS_POSTURA = 14;
@@ -1729,6 +1815,12 @@ function renderInicio() {
       '<div class="hero__big">' + money(r.ingresos) + '</div>' +
       '<div class="hero__label">ingresos por ventas · ' + fmtMonthLabel(mes) + '</div>' +
       '<div class="hero__row"><span class="hero__chip">' + num(r.maplesVendidos) + ' maples vendidos</span></div>' +
+    '</section>' +
+    '<section class="panel">' +
+      '<div class="panel__head"><h3>🚚 Qué entregar cada día</h3><span class="muted">Próximos 7 días</span></div>' +
+      htmlPedidosPorDia() +
+      '<button type="button" class="btn btn--ghost btn--sm" id="btnVerPedidos" style="width:auto;margin-top:10px">Ver todos los pedidos</button>' +
+      '<p class="modalNote" style="margin-top:10px">Cuenta por fecha de entrega. No incluye cancelados; los pedidos sin turno cargado cuentan como Mañana.</p>' +
     '</section>' +
     '<section class="panel">' +
       '<div class="panel__head"><h3>Período</h3></div>' +
@@ -1765,27 +1857,6 @@ function renderInicio() {
       '</p>' +
     '</section>' +
     '<section class="panel">' +
-      '<div class="panel__head"><h3>Postura por semana</h3><span class="muted">Últimas 8 semanas</span></div>' +
-      (semConDatos.length
-        ? '<canvas id="chartInicioPosturaSemana" height="220"></canvas>'
-        : emptyState('Todavía no hay registros de producción en las últimas 8 semanas.', null)) +
-      '<p class="modalNote">' +
-        (promSemanas !== null
-          ? 'Promedio de las últimas 8 semanas: <strong>' + pct(promSemanas) + '</strong> (' + semConDatos.length + (semConDatos.length === 1 ? ' semana con registros' : ' semanas con registros') + '). '
-          : '') +
-        'Cada punto es el promedio de postura de esa semana (huevos juntados ÷ gallinas ponedoras); las semanas sin carga quedan en blanco.' +
-      '</p>' +
-    '</section>' +
-    '<section class="panel">' +
-      '<div class="panel__head"><h3>Postura por mes</h3><span class="muted">Últimos 6 meses</span></div>' +
-      (mesConDatos.length
-        ? '<canvas id="chartInicioPosturaMes" height="220"></canvas>'
-        : emptyState('Todavía no hay registros de producción en los últimos 6 meses.', null)) +
-      '<p class="modalNote">Cada barra es el promedio diario de postura de ese mes. El mes en curso se marca en amarillo y crece a medida que cargás los días.' +
-        (mesConDatos.length > 1 ? ' Mejor mes: <strong>' + fmtMonthLabel(mesConDatos.reduce((a, b) => b.promedio > a.promedio ? b : a).mes) + '</strong>.' : '') +
-      '</p>' +
-    '</section>' +
-    '<section class="panel">' +
       '<div class="panel__head"><h3>Resultado del período</h3></div>' +
       '<div class="tableWrap"><table class="table"><tbody>' +
         '<tr><td>Ingresos por ventas</td><td style="text-align:right"><strong>' + money(r.ingresos) + '</strong></td></tr>' +
@@ -1795,6 +1866,8 @@ function renderInicio() {
       '</tbody></table></div>' +
     '</section>';
 
+  const btnVerPedidos = document.getElementById('btnVerPedidos');
+  if (btnVerPedidos) btnVerPedidos.addEventListener('click', () => setTab('pedidos'));
   const inputMes = document.getElementById('inicio_mes');
   if (inputMes) inputMes.addEventListener('change', () => {
     if (!inputMes.value) return;
@@ -1833,71 +1906,6 @@ function renderInicio() {
         },
         scales: {
           x: { ticks: { color: '#94A3B8', font: baseFont(), maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }, grid: { display: false } },
-          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
-        }
-      }
-    });
-  }
-  const canvas = document.getElementById('chartInicioPosturaSemana');
-  if (canvas && typeof Chart !== 'undefined' && semConDatos.length) {
-    destroyChart('chartInicioPosturaSemana');
-    state.charts['chartInicioPosturaSemana'] = new Chart(canvas.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: semanasPostura.map(w => fmtDateShort(w.desde)),
-        datasets: [{
-          label: 'Postura',
-          data: semanasPostura.map(w => w.promedio === null ? null : Number(w.promedio.toFixed(1))),
-          borderColor: '#78B99A',
-          backgroundColor: 'rgba(120,185,154,0.18)',
-          fill: true,
-          tension: 0.35,
-          spanGaps: false,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: '#F2C14E',
-          pointBorderColor: '#1B2430',
-          pointBorderWidth: 1.5,
-          borderWidth: 2.5
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, animation: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => 'Postura: ' + ctx.parsed.y + '%' } }
-        },
-        scales: {
-          x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
-          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
-        }
-      }
-    });
-  }
-  const canvasMes = document.getElementById('chartInicioPosturaMes');
-  if (canvasMes && typeof Chart !== 'undefined' && mesConDatos.length) {
-    const mesActualKeyStr = mesFin.slice(0, 7);
-    destroyChart('chartInicioPosturaMes');
-    state.charts['chartInicioPosturaMes'] = new Chart(canvasMes.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: mesesPostura.map(m => fmtMonthLabel(m.mes)),
-        datasets: [{
-          label: 'Postura',
-          data: mesesPostura.map(m => m.promedio === null ? null : Number(m.promedio.toFixed(1))),
-          backgroundColor: mesesPostura.map(m => m.mes === mesActualKeyStr ? '#F2C14E' : '#78B99A'),
-          borderRadius: 8,
-          maxBarThickness: 44
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, animation: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => 'Postura: ' + ctx.parsed.y + '%' } }
-        },
-        scales: {
-          x: { ticks: { color: '#94A3B8', font: baseFont() }, grid: { display: false } },
           y: { beginAtZero: true, suggestedMax: 100, ticks: { color: '#94A3B8', font: baseFont(), callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.06)' } }
         }
       }
@@ -2823,13 +2831,7 @@ function _renderPedidosInner(el) {
         '<div id="fp_resumen" style="margin-top:6px"></div>' +
         '<div id="fp_lista"></div>' +
       '</section>';
-    })() +
-
-    '<section class="panel" id="secPedidosSemanal">' +
-      '<div class="panel__head"><h3>🚚 Qué entregar cada día</h3><span class="muted">Próximos 7 días</span></div>' +
-      '<div id="ps_tabla"></div>' +
-      '<p class="modalNote">Cuenta por fecha de entrega. No incluye cancelados; los pedidos sin turno cargado cuentan como Mañana.</p>' +
-    '</section>';
+    })();
 
   /* --- Lista de pedidos filtrable (unificada) --- */
   function actualizarListaPedidos() {
@@ -2921,101 +2923,10 @@ function _renderPedidosInner(el) {
   if (cliInput) cliInput.addEventListener('input', actualizarListaPedidos);
   actualizarListaPedidos();
 
-  /* --- Qué entregar cada día (próximos 7 días): clientes por turno --- */
-  /* Nombre abreviado: "Juan Pérez" -> "Juan P.", y se recorta si es muy largo. */
-  function nombreCorto(nombre) {
-    const limpio = String(nombre || '').trim().replace(/\s+/g, ' ');
-    if (!limpio) return 'Sin nombre';
-    const partes = limpio.split(' ');
-    let base = partes[0];
-    if (base.length > 9) base = base.slice(0, 8) + '\u2026';
-    if (partes.length > 1) {
-      base += ' ' + partes[partes.length - 1].charAt(0).toUpperCase() + '.';
-    }
-    return base;
-  }
-
-  function pintarPedidosPorDia() {
-    const cont = document.getElementById('ps_tabla');
-    if (!cont) return;
-    const DIAS = 7;
-    const NOMBRE_DIA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const bloques = [];
-    let totMan = 0, totTar = 0, totPed = 0, totMaples = 0, diasCon = 0;
-
-    const fmtMp = (mp) => { const v = Math.round(mp * 10) / 10; return num(v); };
-
-    const chipCliente = (pd, turno) => {
-      const mp = maplesDePedido(pd);
-      const detalle = pd.producto === 'HUEVOS'
-        ? (mp > 0 ? '(' + fmtMp(mp) + ')' : '')
-        : '(' + num(Number(pd.cantidadPresentacion) || 0) + ' frascos)';
-      return '<span class="chipCliente' + (turno === 'TARDE' ? ' chipCliente--tarde' : '') + '">' +
-        escapeHtml(nombreCorto(pd.clienteNombre)) + (detalle ? ' <b>' + detalle + '</b>' : '') +
-      '</span>';
-    };
-
-    const filaTurno = (arr, turno, etiqueta) => {
-      const clase = turno === 'TARDE' ? 'tar' : 'man';
-      const ordenados = arr.slice().sort((a, b) => (a.clienteNombre || '').localeCompare(b.clienteNombre || ''));
-      return '<div class="diaTurno">' +
-        '<span class="diaTurno__lbl diaTurno__lbl--' + clase + '">' + etiqueta + '</span>' +
-        (ordenados.length
-          ? '<span class="diaTurno__chips">' + ordenados.map(pd => chipCliente(pd, turno)).join('') + '</span>'
-          : '<span class="muted" style="font-size:11.5px">—</span>') +
-      '</div>';
-    };
-
-    for (let i = 0; i < DIAS; i++) {
-      const fecha = addDays(hoy, i);
-      const delDia = (state.pedidos || []).filter(pd => {
-        if (pd.estado === 'CANCELADO') return false;
-        return (pd.fechaNecesaria || pd.fechaReserva) === fecha;
-      });
-      const man = delDia.filter(pd => (pd.turno || 'MANANA') === 'MANANA');
-      const tar = delDia.filter(pd => (pd.turno || 'MANANA') === 'TARDE');
-      const maples = delDia.reduce((s2, pd) => s2 + maplesDePedido(pd), 0);
-      totMan += man.length; totTar += tar.length; totPed += delDia.length; totMaples += maples;
-      if (delDia.length) diasCon++;
-
-      const dow = new Date(fecha + 'T12:00:00').getDay();
-      const nota = i === 0 ? 'hoy' : i === 1 ? 'mañana' : '';
-      const finde = dow === 0 || dow === 6;
-      const fechaTxt = '<div><strong>' + NOMBRE_DIA[dow] + ' ' + fecha.slice(8, 10) + '/' + fecha.slice(5, 7) + '</strong>' +
-        (nota ? ' <span class="muted" style="font-size:10.5px">(' + nota + ')</span>' : '') + '</div>';
-
-      if (!delDia.length) {
-        bloques.push('<div class="diaCard diaCard--vacio' + (finde ? ' diaCard--finde' : '') + '">' +
-          '<div class="diaCard__top">' + fechaTxt +
-            '<span class="muted" style="font-size:10.5px">sin pedidos</span>' +
-          '</div>' +
-        '</div>');
-        continue;
-      }
-
-      bloques.push('<div class="diaCard' + (i === 0 ? ' diaCard--hoy' : (finde ? ' diaCard--finde' : '')) + '">' +
-        '<div class="diaCard__top">' + fechaTxt +
-          '<span class="muted" style="font-size:10.5px">' + delDia.length + (delDia.length === 1 ? ' pedido' : ' pedidos') +
-            (maples > 0 ? ' · ' + (Math.round(maples * 10) / 10 === 1 ? '1 maple' : fmtMp(maples) + ' maples') : '') + '</span>' +
-        '</div>' +
-        filaTurno(man, 'MANANA', 'Mañana') +
-        filaTurno(tar, 'TARDE', 'Tarde') +
-      '</div>');
-    }
-
-    cont.innerHTML = bloques.join('') +
-      '<p class="muted" style="font-size:11.5px;margin-top:8px">' +
-        (totPed
-          ? 'En los próximos 7 días tenés <b>' + totPed + '</b> pedidos: <b>' + totMan + '</b> a la mañana y <b>' + totTar + '</b> a la tarde · ' + (Math.round(totMaples * 10) / 10 === 1 ? '1 maple' : fmtMp(totMaples) + ' maples') + ' · ' + diasCon + ' día' + (diasCon === 1 ? '' : 's') + ' con entregas.'
-          : 'No hay pedidos para los próximos 7 días.') +
-      '</p>';
-  }
-  pintarPedidosPorDia();
-
   /* --- Reporte de entregas del día (Mañana / Tarde) --- */
   function textoCantidad(pd) {
     if (pd.producto === 'HUEVOS') {
-      if (pd.presentacion === 'MAPLE') return pd.cantidadPresentacion + ' maples';
+      if (pd.presentacion === 'MAPLE') return pd.cantidadPresentacion + (Number(pd.cantidadPresentacion) === 1 ? ' maple' : ' maples');
       return pd.cantidadPresentacion + ' ' + (pd.presentacion === 'DOCENA' ? 'docenas' : 'medias') + ' (' + pd.cantidadUnidadesBase + ' u.)';
     }
     return pd.cantidadPresentacion + ' frascos';
